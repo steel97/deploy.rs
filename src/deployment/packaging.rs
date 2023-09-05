@@ -6,7 +6,6 @@ use std::{
     fs::{self, metadata, File},
     io,
     path::{Path, PathBuf},
-    vec,
 };
 
 pub struct PackageCreator<'a> {
