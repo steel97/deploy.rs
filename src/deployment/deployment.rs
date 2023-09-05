@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use futures::lock::Mutex;
 use russh::{client::Handle, *};
 use russh_keys::*;
-use std::{any, collections::HashMap, sync::Arc};
+use std::{any, collections::HashMap, sync::Arc, time::Duration};
 use tokio::{fs::File, io::BufReader};
 
 use super::packaging::PackageCreator;
@@ -136,6 +136,16 @@ pub async fn deploy(
                 let mut tmp_file_name = String::new();
                 while let Some(res) = channel.wait().await {
                     match res {
+                        russh::ChannelMsg::ExtendedData { ref data, ext } => {
+                            match std::str::from_utf8(data) {
+                                Ok(v) => {
+                                    tmp_file_name += v;
+                                }
+                                Err(_) => {
+                                    continue 'preDeployConnection;
+                                }
+                            };
+                        }
                         russh::ChannelMsg::Data { ref data } => {
                             match std::str::from_utf8(data) {
                                 Ok(v) => {
@@ -161,9 +171,11 @@ pub async fn deploy(
                 // iterate through external files & try to compute all checksums
                 let config_res = config.lock().await;
                 let package_element = &config_res.packages[package];
-                let mut creator = PackageCreator::new(); //new PackageCreator(Array.Empty<byte>());
                 let mut files: Vec<String> = Vec::new();
-                creator.collect_files_ext(package_element.local_directory.to_string(), &mut files);
+                PackageCreator::collect_files_ext(
+                    package_element.local_directory.to_string(),
+                    &mut files,
+                );
                 /*for element in &files {
                     println!("file {}", element);
                 }*/
@@ -177,9 +189,20 @@ pub async fn deploy(
                 let mut channel = session.channel_open_session().await?;
                 let fmt = format!("{}sha1sum{}", SUDO_PREPEND, cmdpars);
                 channel.exec(true, fmt).await?;
+
                 let mut cmd_res = String::new();
                 while let Some(res) = channel.wait().await {
                     match res {
+                        russh::ChannelMsg::ExtendedData { ref data, ext } => {
+                            match std::str::from_utf8(data) {
+                                Ok(v) => {
+                                    cmd_res += v;
+                                }
+                                Err(_) => {
+                                    continue 'preDeployConnection;
+                                }
+                            };
+                        }
                         russh::ChannelMsg::Data { ref data } => {
                             match std::str::from_utf8(data) {
                                 Ok(v) => {
@@ -196,7 +219,7 @@ pub async fn deploy(
 
                 let cmd_y_res: Vec<&str> = cmd_res.split("\n").collect();
                 for (i, cmyr) in cmd_y_res.iter().enumerate() {
-                    if cmyr == &"" {
+                    if files.len() <= i {
                         continue;
                     }
                     let sum_vec: Vec<&str> = cmyr.split(" ").collect();
@@ -208,16 +231,10 @@ pub async fn deploy(
                         .insert(files[i].to_string(), sum.to_string());
                 }
 
-                //for chksum in &checksums {
-                /*for (key, value) in &checksums {
-                    for (k1, v1) in value {
-                        println!("{} = {}", k1, v1);
-                    }
-                }*/
                 target_package_names.insert(package.to_string(), tmp_file_name);
-
-                break 'preDeployConnection;
             }
+
+            break 'preDeployConnection;
         } else {
             return Err(anyhow!("Authentication failed"));
         }
@@ -227,6 +244,97 @@ pub async fn deploy(
     let mut ongoing_deploy_packages_state: Vec<String> = Vec::new();
     'ongoinDeployConnection: loop {
         let mut checksums_deep_copy: HashMap<String, HashMap<String, String>> = HashMap::new();
+        for (key, value) in &checksums {
+            checksums_deep_copy.insert(key.to_string(), HashMap::new());
+            for (k1, v1) in value {
+                checksums_deep_copy
+                    .get_mut(key)
+                    .unwrap()
+                    .insert(k1.to_string(), v1.to_string());
+            }
+        }
+
+        // create ssh session
+        let mut session: Handle<Client>;
+
+        // ssh config
+        let ssh_config = russh::client::Config::default();
+        let ssh_config = Arc::new(ssh_config);
+        let sh = Client {};
+        match russh::client::connect(ssh_config, (target.host.to_owned(), target.port), sh).await {
+            Err(..) => continue 'ongoinDeployConnection,
+            Ok(res) => {
+                session = res;
+            }
+        }
+
+        let mut auth = false;
+        let creds: Vec<&str> = auth_str.split(":").collect();
+        match auth_type.as_str() {
+            "certificate" => {
+                let mut cert_pass: Option<&str> = None;
+                if creds.len() > 2 {
+                    cert_pass = Some(creds[2]);
+                }
+                //let file = File::open(creds[1]).await.unwrap();
+                //let reader = BufReader::new(file);
+                //let key =
+                //    Arc::new(russh_keys::openssh::decode_openssh(reader.buffer(), cert_pass).unwrap());
+                let key = Arc::new(russh_keys::load_secret_key(creds[1], cert_pass).unwrap()); // should panic if key wrong
+                match session.authenticate_publickey(creds[0], key.clone()).await {
+                    Err(..) => continue 'ongoinDeployConnection,
+                    Ok(res) => {
+                        auth = res;
+                    }
+                }
+            }
+            "password" => match session.authenticate_password(creds[0], creds[1]).await {
+                Err(..) => continue 'ongoinDeployConnection,
+                Ok(res) => {
+                    auth = res;
+                }
+            },
+            _ => {}
+        }
+        //println!("auth = {}", auth);
+        if auth {
+            for package in &target.packages {
+                if ongoing_deploy_packages_state.contains(package) {
+                    continue;
+                }
+
+                let config_res = config.lock().await;
+                let package_element = &config_res.packages[package];
+
+                let creator = PackageCreator::new(checksums_deep_copy.get(package).unwrap());
+                let res =
+                    creator.prepare_package_for_target(package_element.local_directory.to_string());
+                //, out byte[] hashes, out int writtenEntries);
+                if res.1 {
+
+                    /*
+                    packageElement.Uploaded = true;
+                            lock (CustomConsole.ConsoleLock)
+                            {
+                                CustomConsole.ResetLine();
+                                Console.WriteLine($"[2/4] Uploading {package} [{Path.GetFileName(archivePath)}]");
+                            }
+                    */
+                } else {
+                    /*
+                    lock (CustomConsole.ConsoleLock)
+                        {
+                            CustomConsole.ResetLine();
+                            Console.WriteLine($"[2/4] No changes for {package}");
+                        }
+                     */
+                }
+
+                ongoing_deploy_packages_state.push(package.to_string());
+            }
+
+            break 'ongoinDeployConnection;
+        }
     }
 
     Ok(())

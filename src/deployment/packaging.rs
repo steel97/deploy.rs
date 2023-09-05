@@ -1,25 +1,82 @@
+use core::fmt::Write;
+use flate2::{write::GzEncoder, Compression};
+use sha1::{Digest, Sha1};
 use std::{
-    fs::{self, metadata},
+    collections::HashMap,
+    fs::{self, metadata, File},
+    io,
     path::{Path, PathBuf},
+    vec,
 };
 
-pub struct PackageCreator {}
+pub struct PackageCreator<'a> {
+    server_hash_map: &'a HashMap<String, String>,
+}
 
-impl PackageCreator {
-    pub fn new() -> PackageCreator {
-        PackageCreator {}
+impl PackageCreator<'_> {
+    pub fn new<'a>(server_hashes: &'a HashMap<String, String>) -> PackageCreator<'a> {
+        PackageCreator {
+            server_hash_map: server_hashes,
+        }
     }
 
-    pub fn collect_files_ext(&mut self, local_dir: String, files: &mut Vec<String>) {
+    pub fn prepare_package_for_target(self, local_dir: String) -> (Option<File>, bool) {
+        let mut target_files: Vec<String> = Vec::new();
+        for (key, val) in self.server_hash_map {
+            // get hash
+            let path = local_dir.clone() + key;
+            let mut file = fs::File::open(&path).unwrap();
+
+            let mut hasher = Sha1::new();
+            io::copy(&mut file, &mut hasher).unwrap();
+            let hash_bytes = hasher.finalize();
+            let n = hash_bytes.len();
+            let mut s = String::with_capacity(2 * n);
+            for byte in hash_bytes {
+                write!(s, "{:02X}", byte).unwrap();
+            }
+            s = s.to_lowercase();
+
+            if &s == val {
+                continue;
+            }
+
+            target_files.push(key.to_string());
+        }
+
+        if target_files.len() == 0 {
+            return (None, false);
+        }
+
+        let tar_gz: File = tempfile::tempfile().unwrap();
+        //let tar_gz: File = File::create("D:/test.tar.gz").unwrap();
+        let file_handle = tar_gz.try_clone().unwrap();
+
+        let enc = GzEncoder::new(tar_gz, Compression::default());
+        let mut tar = tar::Builder::new(enc);
+
+        for key in target_files {
+            tar.append_path_with_name(local_dir.clone() + &key, key)
+                .unwrap();
+            //tar.append_file(key, &mut file).unwrap();
+        }
+
+        tar.finish().unwrap();
+
+        (Some(file_handle), true)
+    }
+
+    // static block
+    pub fn collect_files_ext(local_dir: String, files: &mut Vec<String>) {
         let ldir = PathBuf::from(local_dir);
-        self.collect_files(
+        PackageCreator::collect_files(
             ldir.canonicalize().unwrap().to_str().unwrap().to_string(),
             "".to_string(),
             files,
         );
     }
 
-    pub fn collect_files(&mut self, local_dir: String, cur_dir: String, files: &mut Vec<String>) {
+    pub fn collect_files(local_dir: String, cur_dir: String, files: &mut Vec<String>) {
         let path_to_current_directory = Path::new(&local_dir).join(cur_dir);
         let paths: Vec<_> = fs::read_dir(path_to_current_directory)
             .unwrap()
@@ -56,7 +113,7 @@ impl PackageCreator {
             }
 
             let file_path = path.path();
-            self.collect_files(
+            PackageCreator::collect_files(
                 local_dir.to_string(),
                 file_path.to_str().unwrap().to_string(),
                 files,
