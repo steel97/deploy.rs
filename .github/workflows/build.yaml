@@ -17,11 +17,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.build_toolchain }}
-      - run: cargo build --target=${{ build_toolchain }} --release
+      - run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ build_executable }}
-          path: target/${{ build_toolchain }}/release/${{ build_executable }}
+          name: ${{ env.build_executable }}
+          path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
 
   apple-darwin-aarch64:
     name: apple darwin aarch64
@@ -34,11 +34,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.build_toolchain }}
-      - run: cargo build --target=${{ build_toolchain }} --release
+      - run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ build_executable }}
-          path: target/${{ build_toolchain }}/release/${{ build_executable }}
+          name: ${{ env.build_executable }}
+          path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
 
   linux-x86_64:
     name: linux x86_64
@@ -51,11 +51,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.build_toolchain }}
-      - run: cargo build --target=${{ build_toolchain }} --release
+      - run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ build_executable }}
-          path: target/${{ build_toolchain }}/release/${{ build_executable }}
+          name: ${{ env.build_executable }}
+          path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
 
   linux-aarch64:
     name: linux aarch64
@@ -68,8 +68,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.build_toolchain }}
-      - run: cargo build --target=${{ build_toolchain }} --release
+      - run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ build_executable }}
-          path: target/${{ build_toolchain }}/release/${{ build_executable }}
+          name: ${{ env.build_executable }}
+          path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
