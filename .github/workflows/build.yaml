@@ -7,34 +7,35 @@ on:
 
 jobs:
   windows-x86_64:
-    name: windows x86_64
+    name: windows x86_64 (GNU)
     runs-on: ubuntu-latest
+    env:
+      build_toolchain: x86_64-pc-windows-gnu
+      build_executable: deploy.exe
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
-      - run: cargo build --target=x86_64-pc-windows-msvc --release      
+          targets: $build_toolchain
+      - run: cargo build --target=$build_toolchain --release      
       - uses: actions/upload-artifact@v3
         with:
-          name: deploy.exe
-          path: target/x86_64-pc-windows-msvc/release/deploy.exe
+          name: $build_executable
+          path: target/$build_toolchain/release/$build_executable
 
   apple-darwin-aarch64:
     name: apple darwin aarch64
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: aarch64-apple-darwin
-          override: true
-      - uses: actions-rs/cargo@v1
+          targets: aarch64-apple-darwin
+      - run: cargo build --target=aarch64-apple-darwin --release      
+      - uses: actions/upload-artifact@v3
         with:
-          use-cross: true
-          command: build
-          args: --target aarch64-apple-darwin --release
+          name: deploy.exe
+          path: target/aarch64-apple-darwin/release/deploy.exe
 
   linux-x86_64:
     name: linux x86_64
