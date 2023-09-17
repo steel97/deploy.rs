@@ -67,7 +67,26 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
+          targets: ${{ env.build_toolchain }}    
+      - run: sudo apt update & sudo apt install gcc-arm-linux-gnueabihf
+      - run: cargo build --target=${{ env.build_toolchain }} --release
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.build_executable }}
+          path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
+
+  linux-riscv64:
+    name: linux riscv64
+    runs-on: ubuntu-latest
+    env:
+      build_toolchain: riscv64gc-unknown-linux-gnu
+      build_executable: deploy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
           targets: ${{ env.build_toolchain }}
+      - run: sudo apt update & sudo apt install gcc-riscv64-linux-gnu
       - run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
