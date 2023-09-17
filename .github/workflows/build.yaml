@@ -68,7 +68,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.build_toolchain }}    
-      - run: sudo apt update & sudo apt install gcc-arm-linux-gnueabihf
+      - run: |
+          sudo apt update
+          sudo apt install gcc-arm-linux-gnueabihf
       - run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
@@ -86,7 +88,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.build_toolchain }}
-      - run: sudo apt update & sudo apt install gcc-riscv64-linux-gnu
+      - run: |
+          sudo apt update
+          sudo apt install gcc-arm-linux-gnueabihf
       - run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
