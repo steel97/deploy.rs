@@ -14,7 +14,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
-      - run: cargo run build --target=x86_64-pc-windows-msvc --release      
+      - run: cargo build --target=x86_64-pc-windows-msvc --release      
       - uses: actions/upload-artifact@v3
         with:
           name: deploy.exe
