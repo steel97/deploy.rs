@@ -7,23 +7,21 @@ on:
 
 jobs:
   windows-x86_64:
-    name: Windows x86_64
+    name: windows x86_64
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: stable-x86_64-pc-windows-msvc
-          override: true
-      - uses: actions-rs/cargo@v1
+          targets: x86_64-pc-windows-msvc
+      - run: cargo run build --target=x86_64-pc-windows-msvc --release      
+      - uses: actions/upload-artifact@v3
         with:
-          use-cross: true
-          command: build
-          args: --target stable-x86_64-pc-windows-msvc
+          name: deploy.exe
+          path: target/x86_64-pc-windows-msvc/release/deploy.exe
 
   apple-darwin-aarch64:
-    name: Apple darwin aarch64
+    name: apple darwin aarch64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -36,10 +34,10 @@ jobs:
         with:
           use-cross: true
           command: build
-          args: --target aarch64-apple-darwin
+          args: --target aarch64-apple-darwin --release
 
   linux-x86_64:
-    name: Linux x86_64
+    name: linux x86_64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -52,10 +50,10 @@ jobs:
         with:
           use-cross: true
           command: build
-          args: --target x86_64-unknown-linux-gnu
+          args: --target x86_64-unknown-linux-gnu --release
 
   linux-aarch64:
-    name: Linux aarch64
+    name: linux aarch64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -68,4 +66,4 @@ jobs:
         with:
           use-cross: true
           command: build
-          args: --target aarch64-unknown-linux-gnu
+          args: --target aarch64-unknown-linux-gnu --release
