@@ -19,7 +19,7 @@ impl PackageCreator<'_> {
         }
     }
 
-    pub fn prepare_package_for_target(self, local_dir: String) -> (Option<File>, bool) {
+    pub fn prepare_package_for_target(self, local_temp_file: &File, local_dir: String) -> bool {
         let mut target_files: Vec<String> = Vec::new();
         for (key, val) in self.server_hash_map {
             // get hash
@@ -44,14 +44,14 @@ impl PackageCreator<'_> {
         }
 
         if target_files.len() == 0 {
-            return (None, false);
+            return false;
         }
 
-        let tar_gz: File = tempfile::tempfile().unwrap();
+        //let tar_gz: File = tempfile::NamedTempFile::new().unwrap(); // tempfile::tempfile().unwrap();
         //let tar_gz: File = File::create("D:/test.tar.gz").unwrap();
-        let file_handle = tar_gz.try_clone().unwrap();
+        //let file_handle = tar_gz.try_clone().unwrap();
 
-        let enc = GzEncoder::new(tar_gz, Compression::default());
+        let enc = GzEncoder::new(local_temp_file, Compression::default());
         let mut tar = tar::Builder::new(enc);
 
         for key in target_files {
@@ -62,7 +62,7 @@ impl PackageCreator<'_> {
 
         tar.finish().unwrap();
 
-        (Some(file_handle), true)
+        true
     }
 
     // static block
