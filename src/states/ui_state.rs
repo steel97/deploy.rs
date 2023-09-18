@@ -1,3 +1,5 @@
+use ratatui::widgets::ScrollbarState;
+
 use super::base_state::BaseState;
 
 #[allow(non_camel_case_types)]
@@ -12,6 +14,10 @@ pub struct UIStore {
     pub targets_count: u32,
     pub packages_count: u32,
     pub deployment_target: String,
+
+    // system
+    pub vertical_scroll: u16,
+    pub vertical_scroll_state: ScrollbarState,
 }
 
 impl BaseState<UIStore> for UIStore {
@@ -21,6 +27,8 @@ impl BaseState<UIStore> for UIStore {
             targets_count: 0,
             packages_count: 0,
             deployment_target: String::from(""),
+            vertical_scroll: 0,
+            vertical_scroll_state: ScrollbarState::default(),
         }
     }
 }
@@ -52,6 +60,8 @@ impl UIStore {
             targets_count: self.targets_count,
             packages_count: self.packages_count,
             deployment_target: self.deployment_target.to_owned(),
+            vertical_scroll: 0,
+            vertical_scroll_state: self.vertical_scroll_state,
         }
     }
 }

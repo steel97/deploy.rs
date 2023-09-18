@@ -85,6 +85,7 @@ async fn run(
         let cur_frame = &mut terminal.get_frame();
         let frame = render_ui(cur_frame, ui_state.clone()).await;
         terminal.draw(|_| frame)?;
+        let mut ui_read = ui_state.lock().await;
         if event::poll(Duration::from_millis(250))? {
             if let Event::Key(key) = event::read()? {
                 match key {
@@ -94,6 +95,33 @@ async fn run(
                         ..
                     } => {
                         break;
+                    }
+                    KeyEvent {
+                        code: KeyCode::Esc,
+                        kind: KeyEventKind::Press,
+                        ..
+                    } => {
+                        break;
+                    }
+                    KeyEvent {
+                        code: KeyCode::Down,
+                        kind: KeyEventKind::Press,
+                        ..
+                    } => {
+                        ui_read.vertical_scroll = ui_read.vertical_scroll.saturating_add(1);
+                        ui_read.vertical_scroll_state = ui_read
+                            .vertical_scroll_state
+                            .position(ui_read.vertical_scroll);
+                    }
+                    KeyEvent {
+                        code: KeyCode::Up,
+                        kind: KeyEventKind::Press,
+                        ..
+                    } => {
+                        ui_read.vertical_scroll = ui_read.vertical_scroll.saturating_sub(1);
+                        ui_read.vertical_scroll_state = ui_read
+                            .vertical_scroll_state
+                            .position(ui_read.vertical_scroll);
                     }
                     KeyEvent {
                         code: KeyCode::Char('a'),
