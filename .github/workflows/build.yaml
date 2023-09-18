@@ -12,15 +12,17 @@ jobs:
     env:
       build_toolchain: x86_64-pc-windows-msvc
       build_executable: deploy.exe
+      build_package_name: deploy win-x86_64 (msvc)
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.build_toolchain }}
-      - run: cargo build --target=${{ env.build_toolchain }} --release
+      - name: Build deploy executable
+        run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.build_executable }}
+          name: ${{ env.build_package_name }}
           path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
 
   apple-darwin-aarch64:
@@ -29,15 +31,17 @@ jobs:
     env:
       build_toolchain: aarch64-apple-darwin
       build_executable: deploy
+      build_package_name: deploy macos-aarch64
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.build_toolchain }}
-      - run: cargo build --target=${{ env.build_toolchain }} --release
+      - name: Build deploy executable
+        run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.build_executable }}
+          name: ${{ env.build_package_name }}
           path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
 
   linux-x86_64:
@@ -46,15 +50,17 @@ jobs:
     env:
       build_toolchain: x86_64-unknown-linux-gnu
       build_executable: deploy
+      build_package_name: deploy linux-x86_64 (glibc)
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.build_toolchain }}
-      - run: cargo build --target=${{ env.build_toolchain }} --release
+      - name: Build deploy executable
+        run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.build_executable }}
+          name: ${{ env.build_package_name }}
           path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
 
   linux-aarch64:
@@ -63,18 +69,21 @@ jobs:
     env:
       build_toolchain: aarch64-unknown-linux-gnu
       build_executable: deploy
+      build_package_name: deploy linux-aarch64 (glibc)
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.build_toolchain }}    
-      - run: |
+      - name: Install dependencies
+        run: |
           sudo apt update
-          sudo apt install gcc-arm-linux-gnueabihf
-      - run: cargo build --target=${{ env.build_toolchain }} --release
+          sudo apt install gcc-aarch64-linux-gnu
+      - name: Build deploy executable
+        run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.build_executable }}
+          name: ${{ env.build_package_name }}
           path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
 
   linux-riscv64:
@@ -83,16 +92,19 @@ jobs:
     env:
       build_toolchain: riscv64gc-unknown-linux-gnu
       build_executable: deploy
+      build_package_name: deploy linux-riscv64 (glibc)
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.build_toolchain }}
-      - run: |
+      - name: Install dependencies
+        run: |
           sudo apt update
-          sudo apt install gcc-arm-linux-gnueabihf
-      - run: cargo build --target=${{ env.build_toolchain }} --release
+          sudo apt install gcc-riscv64-linux-gnu
+      - name: Build deploy executable
+        run: cargo build --target=${{ env.build_toolchain }} --release
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.build_executable }}
+          name: ${{ env.build_package_name }}
           path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
