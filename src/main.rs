@@ -41,6 +41,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             ui_state::UIStore::new()
                 .set_targets_count(config_locked.targets.len() as u32)
                 .set_packages_count(config_locked.packages.len() as u32)
+                .set_deployed_count(0)
                 .finalize(),
         ));
     }
@@ -105,7 +106,6 @@ async fn run(
                     }
                     KeyEvent {
                         code: KeyCode::Down,
-                        kind: KeyEventKind::Press,
                         ..
                     } => {
                         ui_read.vertical_scroll = ui_read.vertical_scroll.saturating_add(1);
@@ -114,9 +114,7 @@ async fn run(
                             .position(ui_read.vertical_scroll);
                     }
                     KeyEvent {
-                        code: KeyCode::Up,
-                        kind: KeyEventKind::Press,
-                        ..
+                        code: KeyCode::Up, ..
                     } => {
                         ui_read.vertical_scroll = ui_read.vertical_scroll.saturating_sub(1);
                         ui_read.vertical_scroll_state = ui_read

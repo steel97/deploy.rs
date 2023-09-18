@@ -1,11 +1,13 @@
 use super::packaging::PackageCreator;
 use crate::core::constants::{CHUNK_UPLOAD_RETRIES, SUDO_PREPEND};
+use crate::states::ui_state::{TargetState, UIScreen, UITargetState};
 use crate::{
     serialization::{config::Config, deploy_target::DeployTarget},
     states::ui_state::UIStore,
 };
 use anyhow::anyhow;
 use async_trait::async_trait;
+use futures::future::join_all;
 use futures::lock::Mutex;
 use futures::StreamExt;
 use russh::{client::Handle, *};
@@ -53,14 +55,45 @@ pub async fn begin_deployment(
     let mut copyied_deploy_targets: Vec<DeployTarget> = Vec::new();
     {
         let config_res = config.lock().await;
+        let mut target_index = 0;
         for element in &config_res.targets {
             copyied_deploy_targets.push(element.clone());
+
+            let name = element.name.to_owned().unwrap_or(String::from("unnamed"));
+
+            {
+                let target = TargetState {
+                    state: UITargetState::TARGET_START,
+                    name: name,
+                    upload_package: "none".to_string(),
+                    upload_pos: 0,
+                    upload_len: 0,
+                };
+                let mut ui_state_res = ui_state.lock().await;
+                ui_state_res.set_deployment_target(target_index.clone(), target);
+            }
+
+            target_index = target_index + 1;
         }
     }
 
     // 2. deploy each target
+    let mut target_index = 0;
+    let mut deploy_tasks = Vec::new();
     for deploy_target in &copyied_deploy_targets {
-        deploy(config.clone(), ui_state.clone(), &deploy_target).await?;
+        deploy_tasks.push(tokio::spawn(deploy(
+            config.clone(),
+            ui_state.clone(),
+            deploy_target.clone(),
+            target_index.clone(),
+        )));
+        target_index = target_index + 1;
+    }
+
+    join_all(deploy_tasks).await;
+    {
+        let mut ui_state_res = ui_state.lock().await;
+        ui_state_res.set_screen(UIScreen::FINISHED);
     }
 
     Ok(())
@@ -69,14 +102,9 @@ pub async fn begin_deployment(
 pub async fn deploy(
     config: Arc<Mutex<Config>>,
     ui_state: Arc<Mutex<UIStore>>,
-    target: &DeployTarget,
+    target: DeployTarget,
+    target_index: u32,
 ) -> anyhow::Result<(), anyhow::Error> {
-    {
-        let mut ui_state_res = ui_state.lock().await;
-        let name = target.name.to_owned().unwrap_or(String::from("unnamed"));
-        ui_state_res.set_deployment_target(name);
-    }
-
     // parse credentials
     let (auth_type, auth_str) = target.authentication.iter().next().unwrap(); // should panic if config has errors
     let mut target_package_names: HashMap<String, String> = HashMap::new();
@@ -130,6 +158,16 @@ pub async fn deploy(
         //println!("auth = {}", auth);
         if auth {
             // 3. deploy packages
+            {
+                let mut ui_state_res = ui_state.lock().await;
+                let target_state = ui_state_res
+                    .deployment_targets
+                    .get_mut(&target_index)
+                    .unwrap();
+                target_state.state = UITargetState::TARGET_CHECKSUM;
+                target_state.upload_package = "".to_string();
+            }
+
             for package in &target.packages {
                 // check if we already deployed package
                 if target_package_names.contains_key(package) {
@@ -168,7 +206,14 @@ pub async fn deploy(
                 }
 
                 // #USE_REMOTE_CHECKSUM
-                // [1/4] Computing checksum {package}
+                {
+                    let mut ui_state_res = ui_state.lock().await;
+                    let target_state = ui_state_res
+                        .deployment_targets
+                        .get_mut(&target_index)
+                        .unwrap();
+                    target_state.upload_package = package.to_string()
+                }
                 if !checksums.contains_key(package) {
                     checksums.insert(package.to_string(), HashMap::new());
                 }
@@ -380,6 +425,16 @@ pub async fn deploy(
                                 uploaded,
                                 total_size
                             );*/
+                            {
+                                let mut ui_state_res = ui_state.lock().await;
+                                let target_state = ui_state_res
+                                    .deployment_targets
+                                    .get_mut(&target_index)
+                                    .unwrap();
+                                target_state.state = UITargetState::TARGET_UPLOADING;
+                                target_state.upload_pos = uploaded;
+                                target_state.upload_len = total_size;
+                            }
                         }
                     }
 
@@ -387,13 +442,15 @@ pub async fn deploy(
                     deploy_states_uploaded.insert(package.to_string(), true);
                 } else {
                     //println!("no changes {}", target_package_names.get(package).unwrap());
-                    /*
-                    lock (CustomConsole.ConsoleLock)
-                        {
-                            CustomConsole.ResetLine();
-                            Console.WriteLine($"[2/4] No changes for {package}");
-                        }
-                     */
+                    {
+                        let mut ui_state_res = ui_state.lock().await;
+                        let target_state = ui_state_res
+                            .deployment_targets
+                            .get_mut(&target_index)
+                            .unwrap();
+                        target_state.state = UITargetState::TARGET_NO_CHANGES;
+                        target_state.upload_package = package.to_string();
+                    }
                 }
 
                 ongoing_deploy_packages_state.push(package.to_string());
@@ -449,13 +506,16 @@ pub async fn deploy(
 
         if auth {
             for package in &target.packages {
-                /*
-                lock (CustomConsole.ConsoleLock)
                 {
-                    CustomConsole.ResetLine();
-                    Console.WriteLine($"[3/4] Finishing {package} deployment on {target.Name}");
+                    let mut ui_state_res = ui_state.lock().await;
+                    let target_state = ui_state_res
+                        .deployment_targets
+                        .get_mut(&target_index)
+                        .unwrap();
+                    target_state.state = UITargetState::TARGET_FINISHING;
+                    target_state.upload_package = package.to_string();
                 }
-                */
+
                 let config_res = config.lock().await;
                 let package_element = &config_res.packages[package];
                 if deploy_states_post_action_successed.contains_key(package) {
@@ -509,12 +569,14 @@ pub async fn deploy(
     }
 
     // TO-DO ui set finished
-    /*lock (CustomConsole.ConsoleLock)
     {
-        CustomConsole.ResetLine();
-        CustomConsole.WriteStr($"[4/4] Successfully deployed {target.Name}", ConsoleColor.Green);
+        let mut ui_state_res = ui_state.lock().await;
+        let target_state = ui_state_res
+            .deployment_targets
+            .get_mut(&target_index)
+            .unwrap();
+        target_state.state = UITargetState::TARGET_FINISHED;
     }
-    */
 
     Ok(())
 }
