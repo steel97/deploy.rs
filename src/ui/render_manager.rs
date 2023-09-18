@@ -4,10 +4,9 @@ use crate::{
 };
 use futures::lock::Mutex;
 use ratatui::{
-    prelude::{Backend, Constraint, Corner, Direction, Layout, Rect},
-    style::{Color, Modifier, Style, Stylize},
-    text::{Line, Span},
-    widgets::{Block, Borders, Gauge, LineGauge, List, ListItem, Paragraph, Scrollbar},
+    prelude::{Backend, Constraint, Direction, Layout, Rect},
+    style::{Color, Style, Stylize},
+    widgets::{Block, Borders, Gauge, Paragraph, Scrollbar},
     Frame,
 };
 use std::{cmp::min, sync::Arc};
@@ -142,7 +141,7 @@ pub async fn render_ui<'a, B: 'a + Backend>(
 
         // state label
         element_index = element_index + 1;
-        let mut state_str = String::new();
+        let state_str: String;
         match render_entry.1.state {
             UITargetState::TARGET_START => {
                 state_str = "[1/5] starting deployment".to_string();
@@ -167,7 +166,6 @@ pub async fn render_ui<'a, B: 'a + Backend>(
             UITargetState::TARGET_FINISHED => {
                 state_str = "[5/5] finished".to_string();
             }
-            _ => {}
         }
         let mut state_label = Paragraph::new(state_str).gray();
         if matches!(render_entry.1.state, UITargetState::TARGET_FINISHED) {
