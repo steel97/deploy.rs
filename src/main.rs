@@ -108,10 +108,12 @@ async fn run(
                         code: KeyCode::Down,
                         ..
                     } => {
-                        ui_read.vertical_scroll = ui_read.vertical_scroll.saturating_add(1);
-                        ui_read.vertical_scroll_state = ui_read
-                            .vertical_scroll_state
-                            .position(ui_read.vertical_scroll);
+                        if ui_read.vertical_scroll < ui_read.vertical_scroll_max {
+                            ui_read.vertical_scroll = ui_read.vertical_scroll.saturating_add(1);
+                            ui_read.vertical_scroll_state = ui_read
+                                .vertical_scroll_state
+                                .position(ui_read.vertical_scroll);
+                        }
                     }
                     KeyEvent {
                         code: KeyCode::Up, ..

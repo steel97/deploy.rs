@@ -75,7 +75,16 @@ pub async fn render_ui<'a, B: 'a + Backend>(
     //.scroll((ui_read.vertical_scroll as u16, 0));
     frame.render_widget(block, area);
 
-    ui_read.vertical_scroll_state = ui_read.vertical_scroll_state.content_length(100);
+    let element_height = 1;
+    let y_area_margin = 1;
+    let el_per_scroll = element_height + y_area_margin;
+    let start_from = (ui_read.vertical_scroll / el_per_scroll) as u32;
+    let max_elements = (area.height - (y_area_margin * 2 * 2)) / (element_height + y_area_margin);
+
+    ui_read.vertical_scroll_state = ui_read
+        .vertical_scroll_state
+        .content_length(el_per_scroll * max_elements);
+    ui_read.vertical_scroll_max = el_per_scroll * max_elements;
     /*let paragraph = Paragraph::new("State\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nS3tate\nStat2e\nState\nState\nState\nState\nState\nState\nState1\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\n")
     .gray()
     .block(create_block("Deployment targets"))
@@ -91,14 +100,10 @@ pub async fn render_ui<'a, B: 'a + Backend>(
         &mut ui_read.vertical_scroll_state,
     );
 
-    let element_height = 1;
-    let y_area_margin = 1;
     if area.height < 10 {
         return;
     }
 
-    let start_from = (ui_read.vertical_scroll / (element_height + y_area_margin)) as u32;
-    let max_elements = (area.height - (y_area_margin * 2 * 2)) / (element_height + y_area_margin);
     let mut render_index = 0;
     let mut el_index = 0;
     for render_entry in ui_read.deployment_targets.iter() {
@@ -146,7 +151,12 @@ pub async fn render_ui<'a, B: 'a + Backend>(
                 state_str = format!("[2/5] computing checksum {}", render_entry.1.upload_package);
             }
             UITargetState::TARGET_UPLOADING => {
-                state_str = format!("[3/5] uploading {}", render_entry.1.upload_package);
+                state_str = format!(
+                    "[3/5] uploading {} ({}/{})",
+                    render_entry.1.upload_package,
+                    render_entry.1.upload_pos,
+                    render_entry.1.upload_len
+                );
             }
             UITargetState::TARGET_NO_CHANGES => {
                 state_str = format!("[3/5] no changes for {}", render_entry.1.upload_package);

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use ratatui::widgets::ScrollbarState;
 
@@ -40,6 +40,7 @@ pub struct UIStore {
 
     // system
     pub vertical_scroll: u16,
+    pub vertical_scroll_max: u16,
     pub vertical_scroll_state: ScrollbarState,
 }
 
@@ -52,6 +53,7 @@ impl BaseState<UIStore> for UIStore {
             deployed_count: 0, // successfully deployed targets
             deployment_targets: BTreeMap::new(),
             vertical_scroll: 0,
+            vertical_scroll_max: 0,
             vertical_scroll_state: ScrollbarState::default(),
         }
     }
@@ -91,6 +93,7 @@ impl UIStore {
             deployed_count: self.deployed_count,
             deployment_targets: BTreeMap::new(),
             vertical_scroll: 0,
+            vertical_scroll_max: 0,
             vertical_scroll_state: self.vertical_scroll_state,
         }
     }
