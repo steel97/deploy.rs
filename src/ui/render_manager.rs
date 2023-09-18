@@ -185,11 +185,11 @@ pub async fn render_ui<'a, B: 'a + Backend>(
         // progress bar for uploading
         if matches!(render_entry.1.state, UITargetState::TARGET_UPLOADING) {
             element_index = element_index + 1;
-            let percent = render_entry.1.upload_pos / render_entry.1.upload_len;
+            let percent = render_entry.1.upload_pos as f64 / render_entry.1.upload_len as f64;
             let gauge = Gauge::default()
                 .block(Block::default())
                 .gauge_style(Style::default().fg(Color::Yellow).bg(Color::DarkGray))
-                .percent(percent.try_into().unwrap_or(0));
+                .percent((percent * 100.0) as u16);
 
             frame.render_widget(
                 gauge,
