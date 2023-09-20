@@ -24,12 +24,12 @@ pub async fn render_ui<'a, B: 'a + Backend>(
 
     let paragraph = format!("DEPLOY.RS {}", VERSION);
     let mut state = "State: loading config";
-    let mut state_color = Color::Yellow;
+    let mut state_color = Color::LightYellow;
     match ui_read.screen {
         UIScreen::TARGET_START => {
             state = "State: starting deployment";
         }
-        UIScreen::FINISHED => {
+        UIScreen::FINISHED | UIScreen::FINISHED_END => {
             state = "State: deployment finished";
             state_color = Color::LightGreen;
         }
@@ -46,25 +46,6 @@ pub async fn render_ui<'a, B: 'a + Backend>(
         .style(Style::default().fg(state_color)); // Lightgreen?
     frame.render_widget(motd, chunks[chunk]);
     chunk += 1;
-
-    /*if matches!(ui_read.screen, UIScreen::TARGET_START) {
-        let gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL))
-            .gauge_style(Style::default().fg(Color::Yellow))
-            .percent(30);
-        frame.render_widget(gauge, chunks[chunk]);
-        chunk += 1;
-    }*/
-
-    /*let create_block = |title| {
-        Block::default()
-            .borders(Borders::ALL)
-            .gray()
-            .title(Span::styled(
-                title,
-                Style::default().add_modifier(Modifier::BOLD),
-            ))
-    };*/
 
     let area = chunks[chunk];
     let block = Block::default()
@@ -84,10 +65,6 @@ pub async fn render_ui<'a, B: 'a + Backend>(
         .vertical_scroll_state
         .content_length(el_per_scroll * max_elements);
     ui_read.vertical_scroll_max = el_per_scroll * max_elements;
-    /*let paragraph = Paragraph::new("State\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nS3tate\nStat2e\nState\nState\nState\nState\nState\nState\nState1\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\nState\n")
-    .gray()
-    .block(create_block("Deployment targets"))
-    .scroll((ui_read.vertical_scroll as u16, 0));*/
 
     //frame.render_widget(paragraph, chunks_inner[0]);
     frame.render_stateful_widget(
@@ -188,7 +165,7 @@ pub async fn render_ui<'a, B: 'a + Backend>(
             let percent = render_entry.1.upload_pos as f64 / render_entry.1.upload_len as f64;
             let gauge = Gauge::default()
                 .block(Block::default())
-                .gauge_style(Style::default().fg(Color::Yellow).bg(Color::DarkGray))
+                .gauge_style(Style::default().fg(Color::LightYellow).bg(Color::DarkGray))
                 .percent((percent * 100.0) as u16);
 
             frame.render_widget(
@@ -204,28 +181,4 @@ pub async fn render_ui<'a, B: 'a + Backend>(
 
         render_index = render_index + 1;
     }
-
-    /*let events: Vec<ListItem> = vec![];
-    let gaugert = LineGauge::default()
-        .block(Block::default().borders(Borders::ALL))
-        .gauge_style(Style::default().fg(Color::Yellow))
-        .ratio(0.5);
-    events.push(ListItem::new(vec![
-        Line::from("-".repeat(chunks[1].width as usize)),
-        Line::from(""),
-        gaugert,
-    ]));
-
-    let events_list = List::new(events)
-        .block(Block::default().borders(Borders::ALL).title("Targets"))
-        .start_corner(Corner::BottomLeft);
-    frame.render_widget(events_list, chunks[chunk]);*/
-
-    /*let label = format!("{}/100", 50);
-    let gauge = Gauge::default()
-        .block(Block::default().title("Gauge2").borders(Borders::ALL))
-        .gauge_style(Style::default().fg(Color::Magenta).bg(Color::Green))
-        .percent(50)
-        .label(label);
-    f.render_widget(gauge, chunks[2]);*/
 }

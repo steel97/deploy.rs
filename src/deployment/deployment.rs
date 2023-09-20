@@ -1,12 +1,11 @@
 use super::packaging::PackageCreator;
-use crate::core::constants::{CHUNK_UPLOAD_RETRIES, SUDO_PREPEND};
+use crate::core::constants::{CHUNK_UPLOAD_BUFFER, CHUNK_UPLOAD_RETRIES, SUDO_PREPEND};
 use crate::serialization::deploy_package::DeployPackage;
 use crate::states::ui_state::{TargetState, UIScreen, UITargetState};
 use crate::{
     serialization::{config::Config, deploy_target::DeployTarget},
     states::ui_state::UIStore,
 };
-use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::future::join_all;
 use futures::lock::Mutex;
@@ -18,6 +17,7 @@ use std::cmp::min;
 use std::fs::File;
 use std::{collections::HashMap, sync::Arc};
 use tokio::io::AsyncWriteExt;
+use tokio::time::{sleep, Duration};
 
 struct Client {}
 
@@ -39,11 +39,6 @@ impl client::Handler for Client {
         _data: &[u8],
         session: client::Session,
     ) -> Result<(Self, client::Session), Self::Error> {
-        /*println!(
-            "data on channel {:?}: {:?}",
-            channel,
-            std::str::from_utf8(data)
-        );*/
         Ok((self, session))
     }
 }
@@ -92,9 +87,17 @@ pub async fn begin_deployment(
     }
 
     join_all(deploy_tasks).await;
+
     {
         let mut ui_state_res = ui_state.lock().await;
         ui_state_res.set_screen(UIScreen::FINISHED);
+    }
+
+    sleep(Duration::from_millis(500)).await;
+
+    {
+        let mut ui_state_res = ui_state.lock().await;
+        ui_state_res.set_screen(UIScreen::FINISHED_END);
     }
 
     Ok(())
@@ -113,7 +116,7 @@ pub async fn deploy(
     let mut deploy_states_uploaded: HashMap<String, bool> = HashMap::new();
     let mut deploy_states_post_action_successed: HashMap<String, bool> = HashMap::new();
 
-    'preDeployConnection: loop {
+    'pre_deploy_connection: loop {
         // create ssh session
         let mut session: Handle<Client>;
 
@@ -122,7 +125,7 @@ pub async fn deploy(
         let ssh_config = Arc::new(ssh_config);
         let sh = Client {};
         match russh::client::connect(ssh_config, (target.host.to_owned(), target.port), sh).await {
-            Err(..) => continue 'preDeployConnection,
+            Err(..) => continue 'pre_deploy_connection,
             Ok(res) => {
                 session = res;
             }
@@ -136,20 +139,16 @@ pub async fn deploy(
                 if creds.len() > 2 {
                     cert_pass = Some(creds[2]);
                 }
-                //let file = File::open(creds[1]).await.unwrap();
-                //let reader = BufReader::new(file);
-                //let key =
-                //    Arc::new(russh_keys::openssh::decode_openssh(reader.buffer(), cert_pass).unwrap());
                 let key = Arc::new(russh_keys::load_secret_key(creds[1], cert_pass).unwrap()); // should panic if key wrong
                 match session.authenticate_publickey(creds[0], key.clone()).await {
-                    Err(..) => continue 'preDeployConnection,
+                    Err(..) => continue 'pre_deploy_connection,
                     Ok(res) => {
                         auth = res;
                     }
                 }
             }
             "password" => match session.authenticate_password(creds[0], creds[1]).await {
-                Err(..) => continue 'preDeployConnection,
+                Err(..) => continue 'pre_deploy_connection,
                 Ok(res) => {
                     auth = res;
                 }
@@ -175,9 +174,16 @@ pub async fn deploy(
                     continue;
                 }
 
-                let mut channel = session.channel_open_session().await?;
-                channel.exec(true, "mktemp").await?; // ignore sudo here (important)
+                let mut channel = match session.channel_open_session().await {
+                    Ok(r) => r,
+                    Err(_) => continue 'pre_deploy_connection,
+                };
+                match channel.exec(true, "mktemp").await {
+                    Err(_) => continue 'pre_deploy_connection,
+                    _ => {}
+                }; // ignore sudo here (important)
                 let mut tmp_file_name = String::new();
+                let mut is_msg_read = false;
                 while let Some(res) = channel.wait().await {
                     match res {
                         russh::ChannelMsg::ExtendedData { ref data, ext: _ } => {
@@ -186,7 +192,7 @@ pub async fn deploy(
                                     tmp_file_name += v;
                                 }
                                 Err(_) => {
-                                    continue 'preDeployConnection;
+                                    continue 'pre_deploy_connection;
                                 }
                             };
                         }
@@ -198,12 +204,20 @@ pub async fn deploy(
                                     tmp_file_name = Some(dt[0]).unwrap_or("").to_string();
                                 }
                                 Err(_) => {
-                                    continue 'preDeployConnection;
+                                    continue 'pre_deploy_connection;
                                 }
                             };
                         }
+                        russh::ChannelMsg::Eof => {
+                            is_msg_read = true;
+                            break;
+                        }
                         _ => {}
                     }
+                }
+
+                if !is_msg_read {
+                    continue 'pre_deploy_connection;
                 }
 
                 // #USE_REMOTE_CHECKSUM
@@ -232,9 +246,6 @@ pub async fn deploy(
                     package_element.local_directory.to_string(),
                     &mut files,
                 );
-                /*for element in &files {
-                    println!("file {}", element);
-                }*/
                 // #USE_REMOTE_CHECKSUM_ACCUMULATED_HASHER
                 let mut cmdpars = String::new();
                 for file in &files {
@@ -242,11 +253,18 @@ pub async fn deploy(
                         &format!(" \"{}{}\"", package_element.target_directory, file).to_string();
                 }
 
-                let mut channel = session.channel_open_session().await?;
+                let mut channel = match session.channel_open_session().await {
+                    Ok(r) => r,
+                    Err(_) => continue 'pre_deploy_connection,
+                };
                 let fmt = format!("{}sha1sum{}", SUDO_PREPEND, cmdpars);
-                channel.exec(true, fmt).await?;
+                match channel.exec(true, fmt).await {
+                    Err(_) => continue 'pre_deploy_connection,
+                    _ => {}
+                };
 
                 let mut cmd_res = String::new();
+                let mut is_msg_read = false;
                 while let Some(res) = channel.wait().await {
                     match res {
                         russh::ChannelMsg::ExtendedData { ref data, ext: _ } => {
@@ -255,7 +273,7 @@ pub async fn deploy(
                                     cmd_res += v;
                                 }
                                 Err(_) => {
-                                    continue 'preDeployConnection;
+                                    continue 'pre_deploy_connection;
                                 }
                             };
                         }
@@ -265,12 +283,20 @@ pub async fn deploy(
                                     cmd_res += v;
                                 }
                                 Err(_) => {
-                                    continue 'preDeployConnection;
+                                    continue 'pre_deploy_connection;
                                 }
                             };
                         }
+                        russh::ChannelMsg::Eof => {
+                            is_msg_read = true;
+                            break;
+                        }
                         _ => continue,
                     }
+                }
+
+                if !is_msg_read {
+                    continue 'pre_deploy_connection;
                 }
 
                 let cmd_y_res: Vec<&str> = cmd_res.split("\n").collect();
@@ -290,15 +316,16 @@ pub async fn deploy(
                 target_package_names.insert(package.to_string(), tmp_file_name);
             }
 
-            break 'preDeployConnection;
+            break 'pre_deploy_connection;
         } else {
-            return Err(anyhow!("Authentication failed"));
+            //return Err(anyhow!("Authentication failed"));
+            continue 'pre_deploy_connection;
         }
     }
 
     // 2. prepare & upload packages
     let mut ongoing_deploy_packages_state: Vec<String> = Vec::new();
-    'ongoinDeployConnection: loop {
+    'ongoing_deploy_connection: loop {
         let mut checksums_deep_copy: HashMap<String, HashMap<String, String>> = HashMap::new();
         for (key, value) in &checksums {
             checksums_deep_copy.insert(key.to_string(), HashMap::new());
@@ -318,7 +345,7 @@ pub async fn deploy(
         let ssh_config = Arc::new(ssh_config);
         let sh = Client {};
         match russh::client::connect(ssh_config, (target.host.to_owned(), target.port), sh).await {
-            Err(..) => continue 'ongoinDeployConnection,
+            Err(..) => continue 'ongoing_deploy_connection,
             Ok(res) => {
                 session = res;
             }
@@ -332,20 +359,16 @@ pub async fn deploy(
                 if creds.len() > 2 {
                     cert_pass = Some(creds[2]);
                 }
-                //let file = File::open(creds[1]).await.unwrap();
-                //let reader = BufReader::new(file);
-                //let key =
-                //    Arc::new(russh_keys::openssh::decode_openssh(reader.buffer(), cert_pass).unwrap());
                 let key = Arc::new(russh_keys::load_secret_key(creds[1], cert_pass).unwrap()); // should panic if key wrong
                 match session.authenticate_publickey(creds[0], key.clone()).await {
-                    Err(..) => continue 'ongoinDeployConnection,
+                    Err(..) => continue 'ongoing_deploy_connection,
                     Ok(res) => {
                         auth = res;
                     }
                 }
             }
             "password" => match session.authenticate_password(creds[0], creds[1]).await {
-                Err(..) => continue 'ongoinDeployConnection,
+                Err(..) => continue 'ongoing_deploy_connection,
                 Ok(res) => {
                     auth = res;
                 }
@@ -354,9 +377,20 @@ pub async fn deploy(
         }
 
         if auth {
-            let mut channel = session.channel_open_session().await?;
-            channel.request_subsystem(true, "sftp").await.unwrap();
-            let sftp = SftpSession::new(channel.into_stream()).await.unwrap();
+            let mut channel = match session.channel_open_session().await {
+                Ok(r) => r,
+                Err(_) => continue 'ongoing_deploy_connection,
+            };
+
+            match channel.request_subsystem(true, "sftp").await {
+                Err(..) => continue 'ongoing_deploy_connection,
+                _ => {}
+            }
+
+            let sftp = match SftpSession::new(channel.into_stream()).await {
+                Err(..) => continue 'ongoing_deploy_connection,
+                Ok(res) => res,
+            };
 
             for package in &target.packages {
                 if ongoing_deploy_packages_state.contains(package) {
@@ -390,32 +424,45 @@ pub async fn deploy(
                     // read local file
                     let file = tokio::fs::File::open(&local_temp_file_path_copy).await?;
                     let total_size = file.metadata().await.unwrap().len();
-                    let mut reader_stream = tokio_util::io::ReaderStream::new(file);
+                    let mut reader_stream =
+                        tokio_util::io::ReaderStream::with_capacity(file, CHUNK_UPLOAD_BUFFER);
+
+                    {
+                        let mut ui_state_res = ui_state.lock().await;
+                        let target_state = ui_state_res
+                            .deployment_targets
+                            .get_mut(&target_index)
+                            .unwrap();
+                        target_state.state = UITargetState::TARGET_UPLOADING;
+                        target_state.upload_package = package.to_string();
+                        target_state.upload_pos = 0;
+                        target_state.upload_len = total_size;
+                    }
 
                     // open remote file ()
-                    let mut remote_file = sftp
+                    let mut remote_file = match sftp
                         .create(target_package_names.get(package).unwrap())
                         .await
-                        .unwrap();
+                    {
+                        Err(..) => continue 'ongoing_deploy_connection,
+                        Ok(res) => res,
+                    };
 
                     let mut uploaded = 0;
-                    //println!("reading chunks {}", total_size);
                     while let Some(chunk) = reader_stream.next().await {
                         if let Ok(chunk) = &chunk {
                             let mut chunk_upload_retries = 0;
                             'upload_loop: loop {
                                 if chunk_upload_retries > CHUNK_UPLOAD_RETRIES {
-                                    continue 'ongoinDeployConnection;
+                                    continue 'ongoing_deploy_connection;
                                 }
 
-                                let chunk_upload_res = remote_file.write(chunk).await;
+                                let chunk_upload_res = remote_file.write_all(chunk).await;
                                 match chunk_upload_res {
                                     Ok(_) => {
-                                        //println!("written {}", chunk_upload_res);
                                         break 'upload_loop;
                                     }
                                     Err(_) => {
-                                        //println!("upl error {}", err);
                                         chunk_upload_retries += 1;
                                         continue 'upload_loop;
                                     }
@@ -424,17 +471,6 @@ pub async fn deploy(
 
                             let new = min(uploaded + (chunk.len() as u64), total_size);
                             uploaded = new;
-                            //bar.set_position(new);
-                            //if uploaded >= total_size {
-                            //bar.finish_upload(&input_, &output_);
-                            //}
-
-                            /*println!(
-                                "upl chunk {} {}/{}",
-                                target_package_names.get(package).unwrap(),
-                                uploaded,
-                                total_size
-                            );*/
                             {
                                 let mut ui_state_res = ui_state.lock().await;
                                 let target_state = ui_state_res
@@ -448,10 +484,8 @@ pub async fn deploy(
                         }
                     }
 
-                    //println!("uploaded {}", target_package_names.get(package).unwrap());
                     deploy_states_uploaded.insert(package.to_string(), true);
                 } else {
-                    //println!("no changes {}", target_package_names.get(package).unwrap());
                     {
                         let mut ui_state_res = ui_state.lock().await;
                         let target_state = ui_state_res
@@ -466,11 +500,11 @@ pub async fn deploy(
                 ongoing_deploy_packages_state.push(package.to_string());
             }
 
-            break 'ongoinDeployConnection;
+            break 'ongoing_deploy_connection;
         }
     }
 
-    'postDeployConnection: loop {
+    'post_deploy_connection: loop {
         // create ssh session
         let mut session: Handle<Client>;
 
@@ -479,7 +513,7 @@ pub async fn deploy(
         let ssh_config = Arc::new(ssh_config);
         let sh = Client {};
         match russh::client::connect(ssh_config, (target.host.to_owned(), target.port), sh).await {
-            Err(..) => continue 'postDeployConnection,
+            Err(..) => continue 'post_deploy_connection,
             Ok(res) => {
                 session = res;
             }
@@ -493,20 +527,16 @@ pub async fn deploy(
                 if creds.len() > 2 {
                     cert_pass = Some(creds[2]);
                 }
-                //let file = File::open(creds[1]).await.unwrap();
-                //let reader = BufReader::new(file);
-                //let key =
-                //    Arc::new(russh_keys::openssh::decode_openssh(reader.buffer(), cert_pass).unwrap());
                 let key = Arc::new(russh_keys::load_secret_key(creds[1], cert_pass).unwrap()); // should panic if key wrong
                 match session.authenticate_publickey(creds[0], key.clone()).await {
-                    Err(..) => continue 'postDeployConnection,
+                    Err(..) => continue 'post_deploy_connection,
                     Ok(res) => {
                         auth = res;
                     }
                 }
             }
             "password" => match session.authenticate_password(creds[0], creds[1]).await {
-                Err(..) => continue 'postDeployConnection,
+                Err(..) => continue 'post_deploy_connection,
                 Ok(res) => {
                     auth = res;
                 }
@@ -540,35 +570,59 @@ pub async fn deploy(
                 if deploy_states_uploaded.contains_key(package) {
                     // 3. execute pre deploy actions
                     for action in package_element.pre_deploy_actions.iter().flatten() {
-                        let mut channel = session.channel_open_session().await?;
+                        let mut channel = match session.channel_open_session().await {
+                            Ok(r) => r,
+                            Err(_) => continue 'post_deploy_connection,
+                        };
                         let fmt = format!("{}", action);
-                        channel.exec(true, fmt).await?;
+                        match channel.exec(true, fmt).await {
+                            Err(_) => continue 'post_deploy_connection,
+                            _ => {}
+                        };
                     }
                     // 4. deploy package
-                    let mut channel = session.channel_open_session().await?;
+                    let mut channel = match session.channel_open_session().await {
+                        Ok(r) => r,
+                        Err(_) => continue 'post_deploy_connection,
+                    };
                     let fmt = format!(
                         "{}sh -c \"cd '{}';tar -xzf '{}'\"",
                         SUDO_PREPEND,
                         package_element.target_directory,
                         target_package_names.get(package).unwrap()
                     );
-                    channel.exec(true, fmt).await?;
+                    match channel.exec(true, fmt).await {
+                        Err(_) => continue 'post_deploy_connection,
+                        _ => {}
+                    };
 
                     // 5. execute post deploy actions
                     for action in package_element.post_deploy_actions.iter().flatten() {
-                        let mut channel = session.channel_open_session().await?;
+                        let mut channel = match session.channel_open_session().await {
+                            Ok(r) => r,
+                            Err(_) => continue 'post_deploy_connection,
+                        };
                         let fmt = format!("{}", action);
-                        channel.exec(true, fmt).await?;
+                        match channel.exec(true, fmt).await {
+                            Err(_) => continue 'post_deploy_connection,
+                            _ => {}
+                        };
                     }
 
                     // 6. cleanup remote
-                    let mut channel = session.channel_open_session().await?;
+                    let mut channel = match session.channel_open_session().await {
+                        Ok(r) => r,
+                        Err(_) => continue 'post_deploy_connection,
+                    };
                     let fmt = format!(
                         "{}rm -f \"{}\"",
                         SUDO_PREPEND,
                         target_package_names.get(package).unwrap()
                     );
-                    channel.exec(true, fmt).await?;
+                    match channel.exec(true, fmt).await {
+                        Err(_) => continue 'post_deploy_connection,
+                        _ => {}
+                    };
                 }
 
                 deploy_states_post_action_successed.insert(package.to_string(), true);
@@ -579,11 +633,10 @@ pub async fn deploy(
                 // not much sense, but leave for now (ported from C#)
             }
 
-            break 'postDeployConnection;
+            break 'post_deploy_connection;
         }
     }
 
-    // TO-DO ui set finished
     {
         let mut ui_state_res = ui_state.lock().await;
         let target_state = ui_state_res

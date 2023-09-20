@@ -47,6 +47,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // run deployment thread
+    {
+        let mut ui_state_wr = ui_state.lock().await;
+        ui_state_wr.set_screen(UIScreen::TARGET_START);
+    }
+
     tokio::spawn(deployment::begin_deployment(config, ui_state.clone()));
 
     // create cool UI
@@ -86,7 +91,12 @@ async fn run(
         let cur_frame = &mut terminal.get_frame();
         let frame = render_ui(cur_frame, ui_state.clone()).await;
         terminal.draw(|_| frame)?;
-        let mut ui_read = ui_state.lock().await;
+        {
+            let ui_read_l = ui_state.lock().await;
+            if matches!(ui_read_l.screen, UIScreen::FINISHED_END) {
+                break;
+            }
+        }
         if event::poll(Duration::from_millis(250))? {
             if let Event::Key(key) = event::read()? {
                 match key {
@@ -105,9 +115,17 @@ async fn run(
                         break;
                     }
                     KeyEvent {
+                        code: KeyCode::Char('q'),
+                        kind: KeyEventKind::Press,
+                        ..
+                    } => {
+                        break;
+                    }
+                    KeyEvent {
                         code: KeyCode::Down,
                         ..
                     } => {
+                        let mut ui_read = ui_state.lock().await;
                         if ui_read.vertical_scroll < ui_read.vertical_scroll_max {
                             ui_read.vertical_scroll = ui_read.vertical_scroll.saturating_add(1);
                             ui_read.vertical_scroll_state = ui_read
@@ -118,23 +136,11 @@ async fn run(
                     KeyEvent {
                         code: KeyCode::Up, ..
                     } => {
+                        let mut ui_read = ui_state.lock().await;
                         ui_read.vertical_scroll = ui_read.vertical_scroll.saturating_sub(1);
                         ui_read.vertical_scroll_state = ui_read
                             .vertical_scroll_state
                             .position(ui_read.vertical_scroll);
-                    }
-                    KeyEvent {
-                        code: KeyCode::Char('a'),
-                        kind: KeyEventKind::Press,
-                        ..
-                    } => {
-                        let mut ui_state_wr = ui_state.lock().await;
-                        let new_state = if matches!(ui_state_wr.screen, UIScreen::CONFIG) {
-                            UIScreen::TARGET_START
-                        } else {
-                            UIScreen::CONFIG
-                        };
-                        ui_state_wr.set_screen(new_state);
                     }
                     _ => {}
                 }

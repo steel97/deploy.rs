@@ -10,6 +10,7 @@ pub enum UIScreen {
     CONFIG,
     TARGET_START,
     FINISHED,
+    FINISHED_END,
 }
 
 #[allow(non_camel_case_types)]
