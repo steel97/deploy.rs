@@ -1,5 +1,6 @@
 use super::packaging::PackageCreator;
 use crate::core::constants::{CHUNK_UPLOAD_RETRIES, SUDO_PREPEND};
+use crate::serialization::deploy_package::DeployPackage;
 use crate::states::ui_state::{TargetState, UIScreen, UITargetState};
 use crate::{
     serialization::{config::Config, deploy_target::DeployTarget},
@@ -214,13 +215,18 @@ pub async fn deploy(
                         .unwrap();
                     target_state.upload_package = package.to_string()
                 }
+
                 if !checksums.contains_key(package) {
                     checksums.insert(package.to_string(), HashMap::new());
                 }
 
                 // iterate through external files & try to compute all checksums
-                let config_res = config.lock().await;
-                let package_element = &config_res.packages[package];
+                let package_element: DeployPackage;
+                {
+                    let config_res = config.lock().await;
+                    let package_element_base = &config_res.packages[package];
+                    package_element = package_element_base.clone();
+                }
                 let mut files: Vec<String> = Vec::new();
                 PackageCreator::collect_files_ext(
                     package_element.local_directory.to_string(),
@@ -357,8 +363,12 @@ pub async fn deploy(
                     continue;
                 }
 
-                let config_res = config.lock().await;
-                let package_element = &config_res.packages[package];
+                let package_element: DeployPackage;
+                {
+                    let config_res = config.lock().await;
+                    let package_element_base = &config_res.packages[package];
+                    package_element = package_element_base.clone();
+                }
 
                 let creator = PackageCreator::new(checksums_deep_copy.get(package).unwrap());
 
@@ -415,9 +425,9 @@ pub async fn deploy(
                             let new = min(uploaded + (chunk.len() as u64), total_size);
                             uploaded = new;
                             //bar.set_position(new);
-                            if uploaded >= total_size {
-                                //bar.finish_upload(&input_, &output_);
-                            }
+                            //if uploaded >= total_size {
+                            //bar.finish_upload(&input_, &output_);
+                            //}
 
                             /*println!(
                                 "upl chunk {} {}/{}",
@@ -516,8 +526,13 @@ pub async fn deploy(
                     target_state.upload_package = package.to_string();
                 }
 
-                let config_res = config.lock().await;
-                let package_element = &config_res.packages[package];
+                let package_element: DeployPackage;
+                {
+                    let config_res = config.lock().await;
+                    let package_element_base = &config_res.packages[package];
+                    package_element = package_element_base.clone();
+                }
+
                 if deploy_states_post_action_successed.contains_key(package) {
                     continue;
                 }
