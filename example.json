@@ -1,0 +1,46 @@
+{
+    "usesudo": true,
+    "targets": [
+        {
+            "name": "server 1",
+            "host": "192.168.1.1",
+            "port": 22,
+            "authentication": {
+                "password": "<user>:<pass>"
+            },
+            "packages": [
+                "client",
+                "assets"
+            ]
+        },
+        {
+            "name": "server 2",
+            "host": "192.168.1.2",
+            "port": 22,
+            "authentication": {
+                "password": "<user>:<pass>"
+            },
+            "packages": [
+                "assets"
+            ]
+        }
+    ],
+    "packages": {
+        "client": {
+            "localDirectory": "./client/",
+            "targetDirectory": "/var/www/deploy-test/",
+            "preDeployActions": [],
+            "postDeployActions": [
+                "sudo chown -R www-data /var/www/deploy-test/"
+            ]
+        },
+        "assets": {
+            "localDirectory": "../assets/",
+            "targetDirectory": "/var/www/deploy-test/assets/",
+            "preDeployActions": [],
+            "postDeployActions": [
+                "sudo chown -R www-data /var/www/deploy-test/assets/"
+            ]
+        }
+    }
+}
