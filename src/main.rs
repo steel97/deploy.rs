@@ -15,25 +15,32 @@ use deploy::{
 };
 use futures::lock::Mutex;
 use ratatui::{prelude::CrosstermBackend, Terminal};
-use std::{env, error::Error, io::Stdout};
+use std::{env, error::Error, io::Stdout, process::ExitCode};
 use std::{io, sync::Arc};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> ExitCode {
     // load deploy configuration
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        panic!("Error! No config specified.");
+        println!("Error! No config specified.");
+        return ExitCode::from(1);
     }
 
     if !std::path::Path::new(&args[1]).exists() {
-        panic!("Error! Config {} doesn't exists", &args[0]);
+        println!("Error! Config {} doesn't exists", &args[1]);
+        return ExitCode::from(2);
     }
 
     let config = Arc::new(Mutex::new(Config::read_config(&args[1]).unwrap()));
     //println!("test {}", config.read().unwrap().use_sudo.unwrap_or(false));
 
     // create states
+    let mut exit_on_finish = false;
+    if args.len() > 2 {
+        exit_on_finish = args[2].parse().unwrap_or(false);
+    }
+
     let ui_state: Arc<Mutex<UIStore>>;
     {
         let config_locked = config.lock().await;
@@ -42,6 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .set_targets_count(config_locked.targets.len() as u32)
                 .set_packages_count(config_locked.packages.len() as u32)
                 .set_deployed_count(0)
+                .set_exit_on_finish(exit_on_finish)
                 .finalize(),
         ));
     }
@@ -58,14 +66,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let term_res = setup_terminal();
     match term_res {
         Ok(mut terminal) => {
-            run(&mut terminal, ui_state.clone()).await?;
-            restore_terminal(&mut terminal)?;
+            let _ = run(&mut terminal, ui_state.clone()).await;
+            let _ = restore_terminal(&mut terminal);
         }
         _ => {
             println!("Error occured!");
         }
     }
-    Ok(())
+
+    ExitCode::from(0)
 }
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<Stdout>>, Box<dyn Error>> {
@@ -93,7 +102,7 @@ async fn run(
         terminal.draw(|_| frame)?;
         {
             let ui_read_l = ui_state.lock().await;
-            if matches!(ui_read_l.screen, UIScreen::FINISHED_END) {
+            if matches!(ui_read_l.screen, UIScreen::FINISHED_END) && ui_read_l.exit_on_finish {
                 break;
             }
         }

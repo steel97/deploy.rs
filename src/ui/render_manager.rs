@@ -11,6 +11,31 @@ use ratatui::{
 };
 use std::{cmp::min, sync::Arc};
 
+pub fn convert_target_state_to_str(
+    state: UITargetState,
+    upload_package: String,
+    upload_pos: u64,
+    upload_len: u64,
+) -> Result<String, ()> {
+    Ok(match state {
+        UITargetState::TARGET_START => "[1/5] starting deployment".to_string(),
+        UITargetState::TARGET_CHECKSUM => {
+            format!("[2/5] computing checksum {}", upload_package)
+        }
+        UITargetState::TARGET_UPLOADING => {
+            format!(
+                "[3/5] uploading {} ({}/{})",
+                upload_package, upload_pos, upload_len
+            )
+        }
+        UITargetState::TARGET_NO_CHANGES => {
+            format!("[3/5] no changes for {}", upload_package)
+        }
+        UITargetState::TARGET_FINISHING => "[4/5] finishing deployment".to_string(),
+        UITargetState::TARGET_FINISHED => "[5/5] finished".to_string(),
+    })
+}
+
 pub async fn render_ui<'a, B: 'a + Backend>(
     frame: &mut Frame<'a, B>,
     ui_state: Arc<Mutex<UIStore>>,
@@ -80,6 +105,50 @@ pub async fn render_ui<'a, B: 'a + Backend>(
         return;
     }
 
+    let spacing = 4;
+    let mut render_index = 0;
+    let mut el_index = 0;
+    let mut first_el_width = 0;
+    let mut second_el_width = 0;
+
+    // calculate column widths
+    for render_entry in ui_read.deployment_targets.iter() {
+        el_index = el_index + 1;
+        //println!("{}", render_entry.0);
+        if render_entry.0.clone() < start_from {
+            //&start_from {
+            continue;
+        }
+
+        if render_index >= max_elements {
+            break;
+        }
+        // target name
+        let target_name = format!("{}. {}", el_index, render_entry.1.name);
+
+        // state label
+        let state_str = convert_target_state_to_str(
+            render_entry.1.state, //UITargetState::TARGET_FINISHING,
+            render_entry.1.upload_package.to_string(),
+            render_entry.1.upload_pos,
+            render_entry.1.upload_len,
+        )
+        .unwrap();
+
+        let f_len = target_name.len() + spacing;
+        let s_len = state_str.len() + spacing;
+
+        if first_el_width < f_len {
+            first_el_width = f_len;
+        }
+
+        if second_el_width < s_len {
+            second_el_width = s_len;
+        }
+
+        render_index = render_index + 1;
+    }
+
     let mut render_index = 0;
     let mut el_index = 0;
     for render_entry in ui_read.deployment_targets.iter() {
@@ -97,12 +166,14 @@ pub async fn render_ui<'a, B: 'a + Backend>(
 
         // basic container helpers
         let area_margin = 2;
-        let element_count = 3;
         let mut element_index = 0;
-        let element_width = min(
+        /*
+            let element_count = 3;
+            let element_width = min(
             area.width / element_count - area_margin * (element_count + 1),
             40,
-        );
+        );*/
+        let element_width = first_el_width as u16;
 
         // target name
         let target_name = Paragraph::new(format!("{}. {}", el_index, render_entry.1.name)).gray();
@@ -111,39 +182,21 @@ pub async fn render_ui<'a, B: 'a + Backend>(
             Rect::new(
                 area.x + (area_margin * (element_index + 1)) + element_width * element_index,
                 area.y + y_offset,
-                element_width,
+                first_el_width as u16,
                 element_height,
             ),
         );
 
         // state label
         element_index = element_index + 1;
-        let state_str: String;
-        match render_entry.1.state {
-            UITargetState::TARGET_START => {
-                state_str = "[1/5] starting deployment".to_string();
-            }
-            UITargetState::TARGET_CHECKSUM => {
-                state_str = format!("[2/5] computing checksum {}", render_entry.1.upload_package);
-            }
-            UITargetState::TARGET_UPLOADING => {
-                state_str = format!(
-                    "[3/5] uploading {} ({}/{})",
-                    render_entry.1.upload_package,
-                    render_entry.1.upload_pos,
-                    render_entry.1.upload_len
-                );
-            }
-            UITargetState::TARGET_NO_CHANGES => {
-                state_str = format!("[3/5] no changes for {}", render_entry.1.upload_package);
-            }
-            UITargetState::TARGET_FINISHING => {
-                state_str = "[4/5] finishing deployment".to_string();
-            }
-            UITargetState::TARGET_FINISHED => {
-                state_str = "[5/5] finished".to_string();
-            }
-        }
+        let element_width: u16 = second_el_width as u16;
+        let state_str = convert_target_state_to_str(
+            render_entry.1.state,
+            render_entry.1.upload_package.to_string(),
+            render_entry.1.upload_pos,
+            render_entry.1.upload_len,
+        )
+        .unwrap();
         let mut state_label = Paragraph::new(state_str).gray();
         if matches!(render_entry.1.state, UITargetState::TARGET_FINISHED) {
             state_label = state_label.light_green();
@@ -152,7 +205,9 @@ pub async fn render_ui<'a, B: 'a + Backend>(
         frame.render_widget(
             state_label,
             Rect::new(
-                area.x + (area_margin * (element_index + 1)) + element_width * element_index,
+                area.x
+                    + (area_margin * (element_index + 1))
+                    + (first_el_width as u16) * element_index,
                 area.y + y_offset,
                 element_width,
                 element_height,
@@ -171,7 +226,10 @@ pub async fn render_ui<'a, B: 'a + Backend>(
             frame.render_widget(
                 gauge,
                 Rect::new(
-                    area.x + (area_margin * (element_index + 1)) + element_width * element_index,
+                    area.x
+                        + (area_margin * (element_index + 1))
+                        + element_width
+                        + (first_el_width as u16),
                     area.y + y_offset,
                     element_width,
                     element_height,

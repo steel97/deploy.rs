@@ -38,6 +38,7 @@ pub struct UIStore {
     pub packages_count: u32,
     pub deployed_count: u32,
     pub deployment_targets: BTreeMap<u32, TargetState>,
+    pub exit_on_finish: bool,
 
     // system
     pub vertical_scroll: u16,
@@ -53,6 +54,7 @@ impl BaseState<UIStore> for UIStore {
             packages_count: 0,
             deployed_count: 0, // successfully deployed targets
             deployment_targets: BTreeMap::new(),
+            exit_on_finish: false,
             vertical_scroll: 0,
             vertical_scroll_max: 0,
             vertical_scroll_state: ScrollbarState::default(),
@@ -86,6 +88,11 @@ impl UIStore {
         self
     }
 
+    pub fn set_exit_on_finish(&mut self, state: bool) -> &mut UIStore {
+        self.exit_on_finish = state;
+        self
+    }
+
     pub fn finalize(&self) -> UIStore {
         UIStore {
             screen: self.screen,
@@ -93,6 +100,7 @@ impl UIStore {
             packages_count: self.packages_count,
             deployed_count: self.deployed_count,
             deployment_targets: BTreeMap::new(),
+            exit_on_finish: self.exit_on_finish,
             vertical_scroll: 0,
             vertical_scroll_max: 0,
             vertical_scroll_state: self.vertical_scroll_state,
