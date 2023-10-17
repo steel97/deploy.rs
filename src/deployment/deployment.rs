@@ -543,22 +543,42 @@ pub async fn deploy(
                         Err(_) => continue 'post_deploy_connection,
                         _ => {}
                     };
+
+                    while let Some(res) = channel.wait().await {
+                        match res {
+                            russh::ChannelMsg::Eof => {
+                                break;
+                            }
+                            _ => continue,
+                        }
+                    }
                 }
                 // 4. deploy package
-                let mut channel = match session.channel_open_session().await {
-                    Ok(r) => r,
-                    Err(_) => continue 'post_deploy_connection,
-                };
-                let fmt = format!(
-                    "{}sh -c \"cd '{}';tar -xzf '{}'\"",
-                    SUDO_PREPEND,
-                    package_element.target_directory,
-                    target_package_names.get(package).unwrap()
-                );
-                match channel.exec(true, fmt).await {
-                    Err(_) => continue 'post_deploy_connection,
-                    _ => {}
-                };
+                {
+                    let mut channel = match session.channel_open_session().await {
+                        Ok(r) => r,
+                        Err(_) => continue 'post_deploy_connection,
+                    };
+                    let fmt = format!(
+                        "{}sh -c \"cd '{}';tar -xzf '{}'\"",
+                        SUDO_PREPEND,
+                        package_element.target_directory,
+                        target_package_names.get(package).unwrap()
+                    );
+                    match channel.exec(true, fmt).await {
+                        Err(_) => continue 'post_deploy_connection,
+                        _ => {}
+                    };
+
+                    while let Some(res) = channel.wait().await {
+                        match res {
+                            russh::ChannelMsg::Eof => {
+                                break;
+                            }
+                            _ => continue,
+                        }
+                    }
+                }
 
                 // 5. execute post deploy actions
                 for action in package_element.post_deploy_actions.iter().flatten() {
@@ -571,22 +591,42 @@ pub async fn deploy(
                         Err(_) => continue 'post_deploy_connection,
                         _ => {}
                     };
+
+                    while let Some(res) = channel.wait().await {
+                        match res {
+                            russh::ChannelMsg::Eof => {
+                                break;
+                            }
+                            _ => continue,
+                        }
+                    }
                 }
 
                 // 6. cleanup remote
-                let mut channel = match session.channel_open_session().await {
-                    Ok(r) => r,
-                    Err(_) => continue 'post_deploy_connection,
-                };
-                let fmt = format!(
-                    "{}rm -f \"{}\"",
-                    SUDO_PREPEND,
-                    target_package_names.get(package).unwrap()
-                );
-                match channel.exec(true, fmt).await {
-                    Err(_) => continue 'post_deploy_connection,
-                    _ => {}
-                };
+                {
+                    let mut channel = match session.channel_open_session().await {
+                        Ok(r) => r,
+                        Err(_) => continue 'post_deploy_connection,
+                    };
+                    let fmt = format!(
+                        "{}rm -f \"{}\"",
+                        SUDO_PREPEND,
+                        target_package_names.get(package).unwrap()
+                    );
+                    match channel.exec(true, fmt).await {
+                        Err(_) => continue 'post_deploy_connection,
+                        _ => {}
+                    };
+
+                    while let Some(res) = channel.wait().await {
+                        match res {
+                            russh::ChannelMsg::Eof => {
+                                break;
+                            }
+                            _ => continue,
+                        }
+                    }
+                }
             }
 
             deploy_states_post_action_successed.insert(package.to_string(), true);
