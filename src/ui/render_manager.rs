@@ -9,7 +9,7 @@ use ratatui::{
     widgets::{Block, Borders, Gauge, Paragraph, Scrollbar},
     Frame,
 };
-use std::{cmp::min, sync::Arc};
+use std::sync::Arc;
 
 pub fn convert_target_state_to_str(
     state: UITargetState,

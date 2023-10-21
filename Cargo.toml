@@ -6,19 +6,19 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ratatui = { version = "0.22.0", features = ["default"] }
-crossterm = { version = "0.26", features = ["event-stream"] }
+ratatui = { version = "0.23.0", features = ["default"] }
+crossterm = { version = "0.27", features = ["event-stream"] }
 tokio = { version = "1", features = ["full"] }
-serde = { version = "1.0.183", features = ["derive"] }
-russh = { version = "0.38.0" }
+serde = { version = "1.0.189", features = ["derive"] }
+russh = { version = "0.39.0" }
 russh-keys = { version = "0.38.0" }
-serde_json = "1.0.105"
+serde_json = "1.0.107"
 futures = "0.3.28"
 tar = "0.4"
-flate2 = "1.0.27"
-async-trait = "0.1.73"
+flate2 = "1.0.28"
+async-trait = "0.1.74"
 anyhow = "1.0.75"
 tempfile = "3.8.0"
-sha1 = "0.10.5"
-russh-sftp = "2.0.0-beta.2"
+sha1 = "0.10.6"
+russh-sftp = "2.0.0-beta.3"
 tokio-util = { version = "0.7.8", features = ["io"] }
