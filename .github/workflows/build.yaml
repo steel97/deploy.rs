@@ -20,7 +20,7 @@ jobs:
           targets: ${{ env.build_toolchain }}
       - name: Build deploy executable
         run: cargo build --target=${{ env.build_toolchain }} --release
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.build_package_name }}
           path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
@@ -39,7 +39,7 @@ jobs:
           targets: ${{ env.build_toolchain }}
       - name: Build deploy executable
         run: cargo build --target=${{ env.build_toolchain }} --release
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.build_package_name }}
           path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
@@ -58,7 +58,7 @@ jobs:
           targets: ${{ env.build_toolchain }}
       - name: Build deploy executable
         run: cargo build --target=${{ env.build_toolchain }} --release
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.build_package_name }}
           path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
@@ -81,7 +81,7 @@ jobs:
           sudo apt install gcc-aarch64-linux-gnu
       - name: Build deploy executable
         run: cargo build --target=${{ env.build_toolchain }} --release
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.build_package_name }}
           path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
@@ -104,7 +104,7 @@ jobs:
           sudo apt install gcc-riscv64-linux-gnu
       - name: Build deploy executable
         run: cargo build --target=${{ env.build_toolchain }} --release
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.build_package_name }}
           path: target/${{ env.build_toolchain }}/release/${{ env.build_executable }}
