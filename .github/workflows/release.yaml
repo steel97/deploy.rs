@@ -66,12 +66,12 @@ jobs:
       # upload release
       - uses: ncipollo/release-action@v1
         with:
-          commit: 'main'
+          commit: 'master'
           tag: 'v${{ inputs.tag }}'
           allowUpdates: true
           artifactErrorsFailBuild: true
           generateReleaseNotes: true
           draft: '${{ inputs.draft }}'
-          name: 'deploy ${{ inputs.tag }}'
+          name: 'deploy.rs ${{ inputs.tag }}'
           removeArtifacts: true
           artifacts: '*.zip'
