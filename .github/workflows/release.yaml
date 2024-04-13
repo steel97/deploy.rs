@@ -72,6 +72,6 @@ jobs:
           artifactErrorsFailBuild: true
           generateReleaseNotes: true
           draft: '${{ inputs.draft }}'
-          name: 'deploy.rs ${{ inputs.tag }}'
+          name: 'deploy ${{ inputs.tag }}'
           removeArtifacts: true
-          artifacts: '*.zip,*.apk,*.ipa'
+          artifacts: '*.zip
