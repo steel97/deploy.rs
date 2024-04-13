@@ -30,7 +30,7 @@ jobs:
           path: './deploy win-x86_64 (msvc)'
       - run: |
           rm -rf 'deploy-win-x86_64.zip'
-          zip -r 'deploy-win-x86_64.zip' './deploy win-x86_64 (msvc)'
+          zip -j -r 'deploy-win-x86_64.zip' './deploy win-x86_64 (msvc)'
       # 2) artifact (deploy macos-aarch64)
       - uses: actions/download-artifact@v4
         with:
@@ -38,7 +38,7 @@ jobs:
           path: './deploy.app'
       - run: |
           rm -rf 'deploy-macos-aarch64.zip'
-          zip -r 'deploy-macos-aarch64.zip' './deploy.app'
+          zip -j -r 'deploy-macos-aarch64.zip' './deploy.app'
       # 3) artifact (deploy linux-x86_64)
       - uses: actions/download-artifact@v4
         with:
@@ -46,7 +46,7 @@ jobs:
           path: './deploy linux-x86_64 glibc'
       - run: |
           rm -rf 'deploy-linux-x86_64-glibc.zip'
-          zip -r 'deploy-linux-x86_64-glibc.zip' './deploy linux-x86_64 glibc'
+          zip -j -r 'deploy-linux-x86_64-glibc.zip' './deploy linux-x86_64 glibc'
       # 4) artifact (deploy linux-aarch64)
       - uses: actions/download-artifact@v4
         with:
@@ -54,7 +54,7 @@ jobs:
           path: './deploy linux-aarch64 glibc'
       - run: |
           rm -rf 'deploy-linux-aarch64-glibc.zip'
-          zip -r 'deploy-linux-aarch64-glibc.zip' './deploy linux-aarch64 glibc'
+          zip -j -r 'deploy-linux-aarch64-glibc.zip' './deploy linux-aarch64 glibc'
       # 5) artifact (deploy linux-riscv64)
       - uses: actions/download-artifact@v4
         with:
@@ -62,7 +62,7 @@ jobs:
           path: './deploy linux-riscv64 glibc'
       - run: |
           rm -rf 'deploy-linux-riscv64-glibc.zip'
-          zip -r 'deploy-linux-riscv64-glibc.zip' './deploy linux-riscv64 glibc'
+          zip -j -r 'deploy-linux-riscv64-glibc.zip' './deploy linux-riscv64 glibc'
       # upload release
       - uses: ncipollo/release-action@v1
         with:
