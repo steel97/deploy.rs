@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name (without "v" prefix, ex. 1.0.0)'
+        default: '1.0.0'
+      draft:
+        description: 'Should new release be a draft?'
+        type: boolean
+        required: true
+        default: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yaml
+    secrets: inherit
+
+  create_release:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      # 1) artifact (deploy win-x86_64)
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy win-x86_64 (msvc)
+          path: './deploy win-x86_64 (msvc)'
+      - run: |
+          rm -rf 'deploy-win-x86_64.zip'
+          zip -r 'deploy-win-x86_64.zip' './deploy win-x86_64 (msvc)'
+      # 2) artifact (deploy macos-aarch64)
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy macos-aarch64
+          path: './deploy.app'
+      - run: |
+          rm -rf 'deploy-macos-aarch64.zip'
+          zip -r 'deploy-macos-aarch64.zip' './deploy.app'
+      # 3) artifact (deploy linux-x86_64)
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy linux-x86_64 (glibc)
+          path: './deploy linux-x86_64 glibc'
+      - run: |
+          rm -rf 'deploy-linux-x86_64-glibc.zip'
+          zip -r 'deploy-linux-x86_64-glibc.zip' './deploy linux-x86_64 glibc'
+      # 4) artifact (deploy linux-aarch64)
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy linux-aarch64 (glibc)
+          path: './deploy linux-aarch64 glibc'
+      - run: |
+          rm -rf 'deploy-linux-aarch64-glibc.zip'
+          zip -r 'deploy-linux-aarch64-glibc.zip' './deploy linux-aarch64 glibc'
+      # 5) artifact (deploy linux-riscv64)
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy linux-riscv64 (glibc)
+          path: './deploy linux-riscv64 glibc'
+      - run: |
+          rm -rf 'deploy-linux-riscv64-glibc.zip'
+          zip -r 'deploy-linux-riscv64-glibc.zip' './deploy linux-riscv64 glibc'
