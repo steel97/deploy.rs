@@ -63,3 +63,15 @@ jobs:
       - run: |
           rm -rf 'deploy-linux-riscv64-glibc.zip'
           zip -r 'deploy-linux-riscv64-glibc.zip' './deploy linux-riscv64 glibc'
+      # upload release
+      - uses: ncipollo/release-action@v1
+        with:
+          commit: 'main'
+          tag: 'v${{ inputs.tag }}'
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          generateReleaseNotes: true
+          draft: '${{ inputs.draft }}'
+          name: 'deploy.rs ${{ inputs.tag }}'
+          removeArtifacts: true
+          artifacts: '*.zip,*.apk,*.ipa'
