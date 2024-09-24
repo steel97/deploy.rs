@@ -4,7 +4,7 @@ use crate::{
 };
 use futures::lock::Mutex;
 use ratatui::{
-    prelude::{Backend, Constraint, Direction, Layout, Rect},
+    prelude::{Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
     widgets::{Block, Borders, Gauge, Paragraph, Scrollbar},
     Frame,
@@ -36,16 +36,13 @@ pub fn convert_target_state_to_str(
     })
 }
 
-pub async fn render_ui<'a, B: 'a + Backend>(
-    frame: &mut Frame<'a, B>,
-    ui_state: Arc<Mutex<UIStore>>,
-) -> () {
+pub async fn render_ui<'a>(frame: &mut Frame<'a>, ui_state: Arc<Mutex<UIStore>>) -> () {
     let mut ui_read = ui_state.lock().await;
-    let mut chunk = 0;
+    let mut chunk: usize = 0;
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(3), Constraint::Min(2)].as_ref())
-        .split(frame.size());
+        .constraints([Constraint::Max(3), Constraint::Min(2)].as_ref())
+        .split(frame.area());
 
     let paragraph = format!("DEPLOY.RS {}", VERSION);
     let mut state = "State: loading config";
@@ -88,7 +85,7 @@ pub async fn render_ui<'a, B: 'a + Backend>(
 
     ui_read.vertical_scroll_state = ui_read
         .vertical_scroll_state
-        .content_length(el_per_scroll * max_elements);
+        .content_length((el_per_scroll * max_elements) as usize);
     ui_read.vertical_scroll_max = el_per_scroll * max_elements;
 
     //frame.render_widget(paragraph, chunks_inner[0]);

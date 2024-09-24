@@ -139,7 +139,7 @@ async fn run(
                             ui_read.vertical_scroll = ui_read.vertical_scroll.saturating_add(1);
                             ui_read.vertical_scroll_state = ui_read
                                 .vertical_scroll_state
-                                .position(ui_read.vertical_scroll);
+                                .position(ui_read.vertical_scroll as usize);
                         }
                     }
                     KeyEvent {
@@ -149,7 +149,7 @@ async fn run(
                         ui_read.vertical_scroll = ui_read.vertical_scroll.saturating_sub(1);
                         ui_read.vertical_scroll_state = ui_read
                             .vertical_scroll_state
-                            .position(ui_read.vertical_scroll);
+                            .position(ui_read.vertical_scroll as usize);
                     }
                     _ => {}
                 }

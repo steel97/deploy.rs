@@ -12,7 +12,6 @@ use futures::future::join_all;
 use futures::lock::Mutex;
 use futures::StreamExt;
 use russh::{client::Handle, *};
-use russh_keys::*;
 use russh_sftp::client::SftpSession;
 use std::cmp::min;
 use std::fs::File;
@@ -27,20 +26,11 @@ impl client::Handler for Client {
     type Error = anyhow::Error;
 
     async fn check_server_key(
-        self,
-        _server_public_key: &key::PublicKey,
-    ) -> Result<(Self, bool), Self::Error> {
+        &mut self,
+        _server_public_key: &russh_keys::key::PublicKey,
+    ) -> Result<bool, Self::Error> {
         //println!("check_server_key: {:?}", server_public_key);
-        Ok((self, true))
-    }
-
-    async fn data(
-        self,
-        _channel: ChannelId,
-        _data: &[u8],
-        session: client::Session,
-    ) -> Result<(Self, client::Session), Self::Error> {
-        Ok((self, session))
+        Ok(true)
     }
 }
 
@@ -202,10 +192,14 @@ pub async fn deploy(
                 _ => {}
             }; // ignore sudo here (important)
             let mut tmp_file_name = String::new();
-            let mut is_msg_read = false;
+            //let mut is_msg_read = false;
+            let mut is_shit_happend = false;
             while let Some(res) = channel.wait().await {
                 match res {
-                    russh::ChannelMsg::ExtendedData { ref data, ext: _ } => {
+                    russh::ChannelMsg::ExtendedData { ref data, ext } => {
+                        if ext == 1 {
+                            is_shit_happend = true;
+                        }
                         match std::str::from_utf8(data) {
                             Ok(v) => {
                                 tmp_file_name += v;
@@ -228,14 +222,14 @@ pub async fn deploy(
                         };
                     }
                     russh::ChannelMsg::Eof => {
-                        is_msg_read = true;
-                        break;
+                        //is_msg_read = true;
+                        //break;
                     }
                     _ => {}
                 }
             }
 
-            if !is_msg_read {
+            if is_shit_happend {
                 continue 'pre_deploy_connection;
             }
 
@@ -282,11 +276,15 @@ pub async fn deploy(
                 _ => {}
             };
 
-            let mut cmd_res = String::new();
-            let mut is_msg_read = false;
+            let mut cmd_res: String = String::new();
+            let mut is_shit_happend = false;
             while let Some(res) = channel.wait().await {
                 match res {
-                    russh::ChannelMsg::ExtendedData { ref data, ext: _ } => {
+                    russh::ChannelMsg::ExtendedData { ref data, ext } => {
+                        if ext == 1 {
+                            is_shit_happend = true;
+                        }
+
                         match std::str::from_utf8(data) {
                             Ok(v) => {
                                 cmd_res += v;
@@ -307,15 +305,16 @@ pub async fn deploy(
                         };
                     }
                     russh::ChannelMsg::Eof => {
-                        is_msg_read = true;
-                        break;
+                        //is_msg_read = true;
+                        //break;
                     }
                     _ => continue,
                 }
             }
 
-            if !is_msg_read {
-                continue 'pre_deploy_connection;
+            if is_shit_happend {
+                // file sometimes missing (initial upload as an example, so this is expected)
+                //continue 'pre_deploy_connection;
             }
 
             let cmd_y_res: Vec<&str> = cmd_res.split("\n").collect();
@@ -367,7 +366,7 @@ pub async fn deploy(
             }
         };
 
-        let mut channel = match session.channel_open_session().await {
+        let channel = match session.channel_open_session().await {
             Ok(r) => r,
             Err(_) => continue 'ongoing_deploy_connection,
         };
@@ -546,8 +545,17 @@ pub async fn deploy(
 
                     while let Some(res) = channel.wait().await {
                         match res {
+                            russh::ChannelMsg::Data { data: _ } => {
+                                // std out
+                            }
+                            russh::ChannelMsg::ExtendedData { data: _, ext } => {
+                                if ext == 1 {
+                                    // std err
+                                }
+                            }
+                            russh::ChannelMsg::ExitStatus { exit_status: _ } => {}
                             russh::ChannelMsg::Eof => {
-                                break;
+                                //break;
                             }
                             _ => continue,
                         }
@@ -573,7 +581,7 @@ pub async fn deploy(
                     while let Some(res) = channel.wait().await {
                         match res {
                             russh::ChannelMsg::Eof => {
-                                break;
+                                //break;
                             }
                             _ => continue,
                         }
@@ -595,7 +603,7 @@ pub async fn deploy(
                     while let Some(res) = channel.wait().await {
                         match res {
                             russh::ChannelMsg::Eof => {
-                                break;
+                                //break;
                             }
                             _ => continue,
                         }
@@ -621,7 +629,7 @@ pub async fn deploy(
                     while let Some(res) = channel.wait().await {
                         match res {
                             russh::ChannelMsg::Eof => {
-                                break;
+                                //break;
                             }
                             _ => continue,
                         }
