@@ -183,52 +183,54 @@ pub async fn deploy(
                 continue;
             }
 
-            let mut channel = match session.channel_open_session().await {
-                Ok(r) => r,
-                Err(_) => continue 'pre_deploy_connection,
-            };
-            match channel.exec(true, "mktemp").await {
-                Err(_) => continue 'pre_deploy_connection,
-                _ => {}
-            }; // ignore sudo here (important)
-            let mut tmp_file_name = String::new();
-            //let mut is_msg_read = false;
             let mut is_shit_happend = false;
-            while let Some(res) = channel.wait().await {
-                match res {
-                    russh::ChannelMsg::ExtendedData { ref data, ext } => {
-                        if ext == 1 {
-                            is_shit_happend = true;
-                        }
-                        match std::str::from_utf8(data) {
-                            Ok(v) => {
-                                tmp_file_name += v;
-                            }
-                            Err(_) => {
-                                continue 'pre_deploy_connection;
-                            }
-                        };
-                    }
-                    russh::ChannelMsg::Data { ref data } => {
-                        match std::str::from_utf8(data) {
-                            Ok(v) => {
-                                let st = v.to_string();
-                                let dt: Vec<&str> = st.split("\n").collect();
-                                tmp_file_name = Some(dt[0]).unwrap_or("").to_string();
-                            }
-                            Err(_) => {
-                                continue 'pre_deploy_connection;
-                            }
-                        };
-                    }
-                    russh::ChannelMsg::Eof => {
-                        //is_msg_read = true;
-                        //break;
-                    }
+            let mut tmp_file_name = String::new();
+            {
+                let mut channel = match session.channel_open_session().await {
+                    Ok(r) => r,
+                    Err(_) => continue 'pre_deploy_connection,
+                };
+
+                match channel.exec(true, "mktemp").await {
+                    Err(_) => continue 'pre_deploy_connection,
                     _ => {}
+                }; // ignore sudo here (important)
+                   //let mut is_msg_read = false;
+                while let Some(res) = channel.wait().await {
+                    match res {
+                        russh::ChannelMsg::ExtendedData { ref data, ext } => {
+                            if ext == 1 {
+                                is_shit_happend = true;
+                            }
+                            match std::str::from_utf8(data) {
+                                Ok(v) => {
+                                    tmp_file_name += v;
+                                }
+                                Err(_) => {
+                                    continue 'pre_deploy_connection;
+                                }
+                            };
+                        }
+                        russh::ChannelMsg::Data { ref data } => {
+                            match std::str::from_utf8(data) {
+                                Ok(v) => {
+                                    let st = v.to_string();
+                                    let dt: Vec<&str> = st.split("\n").collect();
+                                    tmp_file_name = Some(dt[0]).unwrap_or("").to_string();
+                                }
+                                Err(_) => {
+                                    continue 'pre_deploy_connection;
+                                }
+                            };
+                        }
+                        russh::ChannelMsg::Eof => {
+                            //is_msg_read = true;
+                            //break;
+                        }
+                        _ => {}
+                    }
                 }
             }
-
             if is_shit_happend {
                 continue 'pre_deploy_connection;
             }
@@ -266,49 +268,51 @@ pub async fn deploy(
                     &format!(" \"{}{}\"", package_element.target_directory, file).to_string();
             }
 
-            let mut channel = match session.channel_open_session().await {
-                Ok(r) => r,
-                Err(_) => continue 'pre_deploy_connection,
-            };
-            let fmt = format!("{}sha1sum{}", SUDO_PREPEND, cmdpars);
-            match channel.exec(true, fmt).await {
-                Err(_) => continue 'pre_deploy_connection,
-                _ => {}
-            };
-
             let mut cmd_res: String = String::new();
             let mut is_shit_happend = false;
-            while let Some(res) = channel.wait().await {
-                match res {
-                    russh::ChannelMsg::ExtendedData { ref data, ext } => {
-                        if ext == 1 {
-                            is_shit_happend = true;
-                        }
+            {
+                let mut channel = match session.channel_open_session().await {
+                    Ok(r) => r,
+                    Err(_) => continue 'pre_deploy_connection,
+                };
+                let fmt = format!("{}sha1sum{}", SUDO_PREPEND, cmdpars);
+                match channel.exec(true, fmt).await {
+                    Err(_) => continue 'pre_deploy_connection,
+                    _ => {}
+                };
 
-                        match std::str::from_utf8(data) {
-                            Ok(v) => {
-                                cmd_res += v;
+                while let Some(res) = channel.wait().await {
+                    match res {
+                        russh::ChannelMsg::ExtendedData { ref data, ext } => {
+                            if ext == 1 {
+                                is_shit_happend = true;
                             }
-                            Err(_) => {
-                                continue 'pre_deploy_connection;
-                            }
-                        };
+
+                            match std::str::from_utf8(data) {
+                                Ok(v) => {
+                                    cmd_res += v;
+                                }
+                                Err(_) => {
+                                    continue 'pre_deploy_connection;
+                                }
+                            };
+                        }
+                        russh::ChannelMsg::Data { ref data } => {
+                            match std::str::from_utf8(data) {
+                                Ok(v) => {
+                                    cmd_res += v;
+                                }
+                                Err(_) => {
+                                    continue 'pre_deploy_connection;
+                                }
+                            };
+                        }
+                        russh::ChannelMsg::Eof => {
+                            //is_msg_read = true;
+                            //break;
+                        }
+                        _ => continue,
                     }
-                    russh::ChannelMsg::Data { ref data } => {
-                        match std::str::from_utf8(data) {
-                            Ok(v) => {
-                                cmd_res += v;
-                            }
-                            Err(_) => {
-                                continue 'pre_deploy_connection;
-                            }
-                        };
-                    }
-                    russh::ChannelMsg::Eof => {
-                        //is_msg_read = true;
-                        //break;
-                    }
-                    _ => continue,
                 }
             }
 
@@ -567,25 +571,23 @@ pub async fn deploy(
                         Ok(r) => r,
                         Err(_) => continue 'post_deploy_connection,
                     };
+                    /*let _ = channel
+                    .request_pty(false, "deploy", 100, 50, 0, 0, &[])
+                    .await;*/
+
+                    //"{}sh -c \"cd '{}';tar -xzf '{}'\"",
                     let fmt = format!(
-                        "{}sh -c \"cd '{}';tar -xzf '{}'\"",
+                        "{}tar -xzf '{}' --directory '{}'",
                         SUDO_PREPEND,
-                        package_element.target_directory,
-                        target_package_names.get(package).unwrap()
+                        target_package_names.get(package).unwrap(),
+                        package_element.target_directory
                     );
                     match channel.exec(true, fmt).await {
                         Err(_) => continue 'post_deploy_connection,
                         _ => {}
                     };
 
-                    while let Some(res) = channel.wait().await {
-                        match res {
-                            russh::ChannelMsg::Eof => {
-                                //break;
-                            }
-                            _ => continue,
-                        }
-                    }
+                    while let Some(_res) = channel.wait().await {}
                 }
 
                 // 5. execute post deploy actions
