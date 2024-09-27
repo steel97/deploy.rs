@@ -20,11 +20,10 @@ server requirements:
 + mktemp
 + sha1sum
 + tar
-+ sh
 + rm
 ```
 
 supported keys:
 ```
-ssh-ed25519
+ssh-ed25519 (with password only)
 ```

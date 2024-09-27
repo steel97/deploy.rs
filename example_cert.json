@@ -6,7 +6,7 @@
             "host": "192.168.1.1",
             "port": 22,
             "authentication": {
-                "certificate": "<user>:./example.rsa:<password_if_exists>"
+                "certificate": "<user>:./example.ed25519:<password>"
             },
             "packages": [
                 "client",
@@ -18,7 +18,7 @@
             "host": "192.168.1.2",
             "port": 22,
             "authentication": {
-                "certificate": "<user>:./example.rsa:<password_if_exists>"
+                "certificate": "<user>:./example.ed25519:<password>"
             },
             "packages": [
                 "assets"
