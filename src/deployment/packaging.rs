@@ -55,8 +55,7 @@ impl PackageCreator<'_> {
         let mut tar = tar::Builder::new(enc);
 
         for key in target_files {
-            tar.append_path_with_name(local_dir.clone() + &key, key)
-                .unwrap();
+            let _ = tar.append_path_with_name(local_dir.clone() + &key, key);
             //tar.append_file(key, &mut file).unwrap();
         }
 
