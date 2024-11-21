@@ -55,7 +55,16 @@ impl PackageCreator<'_> {
         let mut tar = tar::Builder::new(enc);
 
         for key in target_files {
-            let _ = tar.append_path_with_name(local_dir.clone() + &key, key);
+            //let key_clone = key.clone();
+            let res = tar.append_path_with_name(local_dir.clone() + &key, key);
+            match res {
+                Ok(()) => {
+                    //println!("Ok, added {}", key_clone)
+                },
+                Err(_e) => {
+                    //println!("Failed to add {} because {}", key_clone, e)
+                }
+            }
             //tar.append_file(key, &mut file).unwrap();
         }
 
@@ -94,7 +103,14 @@ impl PackageCreator<'_> {
                 .into_string()
                 .unwrap()
                 .replace(&local_dir, "");
+
+            // windows
             if name.starts_with('\\') {
+                name = name[1..].to_string();
+            }
+
+            // unix
+            if name.starts_with('/') {
                 name = name[1..].to_string();
             }
 
