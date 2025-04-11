@@ -7,10 +7,11 @@ use crate::{
     states::ui_state::UIStore,
 };
 use anyhow::anyhow;
-use async_trait::async_trait;
 use futures::future::join_all;
 use futures::lock::Mutex;
 use futures::StreamExt;
+use russh::client::AuthResult;
+use russh::keys::PrivateKeyWithHashAlg;
 use russh::{client::Handle, *};
 use russh_sftp::client::SftpSession;
 use std::cmp::min;
@@ -19,17 +20,17 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::io::AsyncWriteExt;
 //use tokio::time::{sleep, Duration};
 
+const CMD_FILES_LIMIT: u16 = 512;
+
 pub struct Client {}
 
-#[async_trait]
 impl client::Handler for Client {
-    type Error = anyhow::Error;
+    type Error = russh::Error;
 
     async fn check_server_key(
         &mut self,
-        _server_public_key: &russh_keys::key::PublicKey,
+        _server_public_key: &russh::keys::PublicKey,
     ) -> Result<bool, Self::Error> {
-        //println!("check_server_key: {:?}", server_public_key);
         Ok(true)
     }
 }
@@ -117,15 +118,22 @@ pub async fn create_session(
             if creds.len() > 2 {
                 cert_pass = Some(creds[2]);
             }
-            let key = Arc::new(russh_keys::load_secret_key(creds[1], cert_pass).unwrap()); // should panic if key wrong
-            auth = session
-                .authenticate_publickey(creds[0], key.clone())
+            let key = Arc::new(russh::keys::load_secret_key(creds[1], cert_pass).unwrap()); // should panic if key wrong
+            let pre_res = session
+                .authenticate_publickey(
+                    creds[0],
+                    PrivateKeyWithHashAlg::new(
+                        key.clone(),
+                        session.best_supported_rsa_hash().await?.flatten(),
+                    ),
+                )
                 .await?;
+            auth = pre_res == AuthResult::Success;
         }
         "password" => match session.authenticate_password(creds[0], creds[1]).await {
             Err(_) => return Err(anyhow!("authentication failed")),
             Ok(res) => {
-                auth = res;
+                auth = res == AuthResult::Success;
             }
         },
         _ => {}
@@ -262,66 +270,83 @@ pub async fn deploy(
                 &mut files,
             );
             // #USE_REMOTE_CHECKSUM_ACCUMULATED_HASHER
-            let mut cmdpars = String::new();
+
+            let mut cmdpars: Vec<String> = Vec::new();
+            let mut cmdpars_buf = String::new();
+            let mut cmdctr = 0;
             for file in &files {
-                cmdpars +=
+                cmdpars_buf +=
                     &format!(" \"{}{}\"", package_element.target_directory, file).to_string();
-            }
-
-            let mut cmd_res: String = String::new();
-            let mut is_shit_happend = false;
-            {
-                let mut channel = match session.channel_open_session().await {
-                    Ok(r) => r,
-                    Err(_) => continue 'pre_deploy_connection,
-                };
-                let fmt = format!("{}sha1sum{}", SUDO_PREPEND, cmdpars);
-                match channel.exec(true, fmt).await {
-                    Err(_) => continue 'pre_deploy_connection,
-                    _ => {}
-                };
-
-                while let Some(res) = channel.wait().await {
-                    match res {
-                        russh::ChannelMsg::ExtendedData { ref data, ext } => {
-                            if ext == 1 {
-                                is_shit_happend = true;
-                            }
-
-                            match std::str::from_utf8(data) {
-                                Ok(v) => {
-                                    cmd_res += v;
-                                }
-                                Err(_) => {
-                                    continue 'pre_deploy_connection;
-                                }
-                            };
-                        }
-                        russh::ChannelMsg::Data { ref data } => {
-                            match std::str::from_utf8(data) {
-                                Ok(v) => {
-                                    cmd_res += v;
-                                }
-                                Err(_) => {
-                                    continue 'pre_deploy_connection;
-                                }
-                            };
-                        }
-                        russh::ChannelMsg::Eof => {
-                            //is_msg_read = true;
-                            //break;
-                        }
-                        _ => continue,
-                    }
+                cmdctr += 1;
+                if cmdctr > CMD_FILES_LIMIT {
+                    cmdpars.push(cmdpars_buf);
+                    cmdpars_buf = String::new();
+                    cmdctr = 0;
                 }
             }
 
-            if is_shit_happend {
-                // file sometimes missing (initial upload as an example, so this is expected)
-                //continue 'pre_deploy_connection;
+            if !cmdpars_buf.is_empty() {
+                cmdpars.push(cmdpars_buf);
+            }
+
+            let mut cmd_res: String = String::new();
+
+            for (_i, cmdpars_entry) in cmdpars.iter().enumerate() {
+                let mut is_shit_happend = false;
+                {
+                    let mut channel = match session.channel_open_session().await {
+                        Ok(r) => r,
+                        Err(_) => continue 'pre_deploy_connection,
+                    };
+                    let fmt = format!("{}sha1sum{}", SUDO_PREPEND, cmdpars_entry);
+                    match channel.exec(true, fmt).await {
+                        Err(_) => continue 'pre_deploy_connection,
+                        _ => {}
+                    };
+
+                    while let Some(res) = channel.wait().await {
+                        match res {
+                            russh::ChannelMsg::ExtendedData { ref data, ext } => {
+                                if ext == 1 {
+                                    is_shit_happend = true;
+                                }
+
+                                match std::str::from_utf8(data) {
+                                    Ok(v) => {
+                                        cmd_res += v;
+                                    }
+                                    Err(_) => {
+                                        continue 'pre_deploy_connection;
+                                    }
+                                };
+                            }
+                            russh::ChannelMsg::Data { ref data } => {
+                                match std::str::from_utf8(data) {
+                                    Ok(v) => {
+                                        cmd_res += v;
+                                    }
+                                    Err(_) => {
+                                        continue 'pre_deploy_connection;
+                                    }
+                                };
+                            }
+                            russh::ChannelMsg::Eof => {
+                                //is_msg_read = true;
+                                //break;
+                            }
+                            _ => continue,
+                        }
+                    }
+                }
+
+                if is_shit_happend {
+                    // file sometimes missing (initial upload as an example, so this is expected)
+                    //continue 'pre_deploy_connection;
+                }
             }
 
             let cmd_y_res: Vec<&str> = cmd_res.split("\n").collect();
+            //panic!("cmd_res: {:?}", cmd_res);
             for (i, cmyr) in cmd_y_res.iter().enumerate() {
                 if files.len() <= i {
                     continue;
