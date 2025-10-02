@@ -60,7 +60,7 @@ async fn main() -> ExitCode {
         ui_state_wr.set_screen(UIScreen::TARGET_START);
     }
 
-    tokio::spawn(deployment::begin_deployment(config, ui_state.clone()));
+    let handle = tokio::spawn(deployment::begin_deployment(config, ui_state.clone()));
 
     // create cool UI
     let term_res = setup_terminal();
@@ -70,7 +70,9 @@ async fn main() -> ExitCode {
             let _ = restore_terminal(&mut terminal);
         }
         _ => {
-            println!("Error occured!");
+            println!("Can't create ui, performing silent deployment.");
+            let _res = handle.await;
+            println!("Deployment complete.");
         }
     }
 
